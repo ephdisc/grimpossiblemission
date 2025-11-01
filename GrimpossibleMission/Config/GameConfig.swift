@@ -67,10 +67,10 @@ struct GameConfig {
     static let cameraOrthographicScale: Float = 20.0
 
     /// Camera tilt angle in degrees (downward angle to see top and front)
-    static let cameraTiltDegrees: Float = 30.0
+    static let cameraTiltDegrees: Float = 35.0
 
-    /// Camera distance from the scene
-    static let cameraDistance: Float = 40.0
+    /// Camera distance from the scene (closer = only one room visible)
+    static let cameraDistance: Float = 25.0
 
     /// Camera transition duration in seconds
     static let cameraTransitionDuration: TimeInterval = 0.8

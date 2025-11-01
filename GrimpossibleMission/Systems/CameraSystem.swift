@@ -34,7 +34,7 @@ class OrthographicCameraController: CameraController {
 
         // Camera positioned in front (negative Z) and above, tilted down
         let distance = GameConfig.cameraDistance
-        let tiltRadians = GameConfig.cameraTiltDegrees * .pi / 180.0
+        let tiltRadians = GameConfig.cameraTiltDegrees * .pi / 270.0
 
         // Calculate camera position with tilt
         let cameraX = roomCenterX
@@ -45,7 +45,8 @@ class OrthographicCameraController: CameraController {
         targetPosition = currentPosition
         cameraEntity.position = currentPosition
 
-        // Look at room center
+        // Set camera rotation ONCE at initialization (fixed orientation)
+        // Camera looks toward z=0 from negative z position with downward tilt
         cameraEntity.look(at: SIMD3<Float>(roomCenterX, roomCenterY, 0), from: currentPosition, relativeTo: nil)
     }
 
@@ -61,27 +62,12 @@ class OrthographicCameraController: CameraController {
             updateTargetPosition(for: mode)
         }
 
-        // Smoothly interpolate to target position
+        // Smoothly interpolate to target position (lateral translation only)
         let lerpFactor = min(Float(deltaTime / GameConfig.cameraTransitionDuration), 1.0)
         currentPosition = simd_mix(currentPosition, targetPosition, SIMD3<Float>(repeating: lerpFactor))
 
+        // Update position only - rotation is fixed from initialization
         cameraEntity.position = currentPosition
-
-        // Update look-at target based on mode
-        let lookAtTarget: SIMD3<Float>
-        switch mode {
-        case .staticRoom(let roomIndex):
-            if roomIndex < rooms.count {
-                let room = rooms[roomIndex]
-                lookAtTarget = SIMD3<Float>(room.center.x, room.center.y, 0)
-            } else {
-                lookAtTarget = SIMD3<Float>(GameConfig.roomWidth / 2, GameConfig.roomHeight / 2, 0)
-            }
-        case .followPlayer:
-            lookAtTarget = playerPosition
-        }
-
-        cameraEntity.look(at: lookAtTarget, from: currentPosition, relativeTo: nil)
     }
 
     private func updateTargetPosition(for mode: CameraMode) {

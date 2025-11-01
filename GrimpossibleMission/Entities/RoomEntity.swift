@@ -14,13 +14,15 @@ import UIKit
 ///   - roomIndex: Index of the room (0 for first room, 1 for second, etc.)
 ///   - hasLeftWall: Whether to create left wall tiles
 ///   - hasRightWall: Whether to create right wall tiles
-///   - entryHeight: Height of entry/doorway at edges (tiles will not be created in this area)
+///   - leftEntryHeight: Height of entry/doorway on left wall (tiles will not be created in this area)
+///   - rightEntryHeight: Height of entry/doorway on right wall (tiles will not be created in this area)
 /// - Returns: Room entity containing all tiles and room bounds component
 func createRoomEntity(
     roomIndex: Int,
     hasLeftWall: Bool = true,
     hasRightWall: Bool = true,
-    entryHeight: Int = 0
+    leftEntryHeight: Int = 0,
+    rightEntryHeight: Int = 0
 ) -> Entity {
     let room = Entity()
     room.name = "Room_\(roomIndex)"
@@ -65,7 +67,7 @@ func createRoomEntity(
     if hasLeftWall {
         for y in 1..<(GameConfig.roomHeightTiles - 1) {
             // Skip entry area if specified
-            if y < entryHeight {
+            if y < leftEntryHeight {
                 continue
             }
 
@@ -82,7 +84,7 @@ func createRoomEntity(
     if hasRightWall {
         for y in 1..<(GameConfig.roomHeightTiles - 1) {
             // Skip entry area if specified
-            if y < entryHeight {
+            if y < rightEntryHeight {
                 continue
             }
 
@@ -183,20 +185,22 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
 /// Creates two side-by-side rooms for the POC.
 /// - Returns: Array containing Room 0 and Room 1 entities
 func createPOCRooms() -> [Entity] {
-    // Room 0: Has right wall with 3-tile entry at bottom
+    // Room 0: Full left wall, right wall with 3-tile doorway at bottom
     let room0 = createRoomEntity(
         roomIndex: 0,
         hasLeftWall: true,
-        hasRightWall: false, // Open right side for connection
-        entryHeight: GameConfig.entryHeightTiles
+        hasRightWall: true,
+        leftEntryHeight: 0, // No doorway on left
+        rightEntryHeight: GameConfig.entryHeightTiles // 3-tile doorway on right
     )
 
-    // Room 1: Has left wall with 3-tile entry at bottom
+    // Room 1: Left wall with 3-tile doorway at bottom, full right wall
     let room1 = createRoomEntity(
         roomIndex: 1,
-        hasLeftWall: false, // Open left side for connection
+        hasLeftWall: true,
         hasRightWall: true,
-        entryHeight: GameConfig.entryHeightTiles
+        leftEntryHeight: GameConfig.entryHeightTiles, // 3-tile doorway on left
+        rightEntryHeight: 0 // No doorway on right
     )
 
     return [room0, room1]

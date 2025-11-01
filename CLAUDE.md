@@ -22,6 +22,77 @@ GrimpossibleMission is a 2.5D platform game for tvOS 26 built with RealityKit us
 - **Reusable components** - Build components that can be used in future projects
 - **No shortcuts** - Maintain architectural integrity even under time pressure
 
+## Effective Working Behaviors
+
+These behaviors have proven effective for this project and should be maintained:
+
+### 1. Plan-Execute-Verify Cycle
+- **Create todo list** before starting any work using TodoWrite
+- **Break down tasks** into specific, actionable items
+- **Mark tasks in_progress** when starting work
+- **Complete one task at a time** - mark completed immediately after finishing
+- **Verify with CLI build** before marking any task complete
+- **Never batch completions** - update progress in real-time
+
+### 2. Incremental Development
+- Make **focused, small changes** rather than large rewrites
+- Test each change with a build before moving to the next
+- If a build fails, fix errors immediately before proceeding
+- Keep changes aligned with the current task in the todo list
+
+### 3. Communication Style
+- **Explain what changed and why** after completing tasks
+- Use clear headings and bullet points for readability
+- Include file paths and line numbers when referencing code
+- Show build status (✅ BUILD SUCCEEDED) after verification
+- Summarize the impact of changes on user experience
+
+### 4. Problem-Solving Approach
+- When stuck, use WebSearch to find current API documentation
+- Read actual code files to understand existing patterns
+- Fix issues at the root cause, not with workarounds
+- Add imports (Foundation, UIKit) when type errors occur
+- Use protocol-based types (`some RealityViewContentProtocol`) for flexibility
+
+### 5. Handling User Feedback
+- Listen carefully to specific issues (e.g., "controls are inverted")
+- Ask clarifying questions using AskUserQuestion when requirements are ambiguous
+- Make exactly the change requested - no scope creep
+- Verify the fix addresses the specific issue raised
+
+### 6. Configuration Management
+- Use GameConfig for all tuneable values
+- Add comments explaining what values control
+- Make it easy for users to adjust gameplay feel
+- Document configuration options in code comments
+
+### 7. Build Verification
+Always verify changes compile before marking complete:
+```bash
+xcodebuild -project GrimpossibleMission.xcodeproj \
+  -scheme GrimpossibleMission \
+  -destination 'platform=tvOS Simulator,name=Apple TV' \
+  build
+```
+
+### 8. Never Compromise on Requirements
+- Do not remove features to simplify implementation
+- Do not lower tvOS version requirements
+- Do not skip planned features without explicit user approval
+- Ask for clarification rather than making assumptions
+
+### 9. Todo List Hygiene
+- Keep exactly ONE task as "in_progress" at a time
+- Update status immediately when starting or completing work
+- Clean up completed tasks by marking them complete promptly
+- Add new tasks discovered during implementation
+
+### 10. Respect the Architecture
+- Follow ECS principles strictly (data in components, logic in systems)
+- Use protocol-based dependency injection
+- Keep composition over inheritance
+- Maintain separation of concerns
+
 ## Architecture
 
 ### Entity Component System (ECS)
