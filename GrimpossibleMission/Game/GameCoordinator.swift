@@ -217,6 +217,7 @@ class GameCoordinator {
 
         for entity in entities {
             guard let searchable = entity.components[SearchableComponent.self],
+                  let progress = entity.components[ProgressComponent.self],
                   let itemPos = entity.components[PositionComponent.self] else {
                 continue
             }
@@ -237,7 +238,7 @@ class GameCoordinator {
                     statusText = "SEARCHED"
                 }
 
-                let progressPercent = Int(searchable.searchProgress * 100)
+                let progressPercent = Int(progress.progress * 100)
                 nearestInfo = String(format: "%@\n%d%%\nDistance: %.1f units", statusText, progressPercent, distance)
             }
         }

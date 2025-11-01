@@ -11,14 +11,19 @@ import RealityKit
 enum SearchableState {
     case searchable  // Not yet searched
     case searching   // Currently being searched
-    case searched    // Already searched
+    case searched    // Already searched (complete)
 }
 
 /// Component for items that can be searched by the player.
+/// Use with ProgressComponent to track search progress.
 struct SearchableComponent: Component {
     var state: SearchableState = .searchable
-    var searchProgress: Float = 0.0  // 0.0 to 1.0
-    var searchDuration: Float = 2.0  // Seconds to complete search
+
+    /// Grace period in seconds - how long the bubble stays visible after stopping
+    var gracePeriod: Float = 2.0
+
+    /// Time elapsed since user stopped searching (for grace period timeout)
+    var timeSinceLastSearch: Float = 0.0
 
     /// Check if item is fully searched
     var isSearched: Bool {
@@ -28,5 +33,10 @@ struct SearchableComponent: Component {
     /// Check if currently being searched
     var isSearching: Bool {
         state == .searching
+    }
+
+    /// Check if grace period has expired
+    var isGracePeriodExpired: Bool {
+        timeSinceLastSearch >= gracePeriod
     }
 }

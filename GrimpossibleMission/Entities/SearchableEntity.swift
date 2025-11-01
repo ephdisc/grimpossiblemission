@@ -31,22 +31,22 @@ func createSearchableItem(x: Float, y: Float, searchDuration: Float = 2.0) -> En
     let positionComponent = PositionComponent(x: x, y: y, z: 0)
 
     // Searchable component
-    var searchableComponent = SearchableComponent()
-    searchableComponent.searchDuration = searchDuration
+    let searchableComponent = SearchableComponent()
+
+    // Progress component
+    var progressComponent = ProgressComponent()
+    progressComponent.duration = searchDuration
 
     // Collision for proximity detection
     let collisionShape = ShapeResource.generateBox(size: itemSize)
     let collisionComponent = CollisionComponent(shapes: [collisionShape])
 
-    // Debug label component
-    let debugLabel = DebugLabelComponent(text: "SEARCHABLE\n0%", offsetY: 1.0)
-
     // Set all components
     item.components.set(modelComponent)
     item.components.set(positionComponent)
     item.components.set(searchableComponent)
+    item.components.set(progressComponent)
     item.components.set(collisionComponent)
-    item.components.set(debugLabel)
 
     // Set transform
     item.position = positionComponent.simd

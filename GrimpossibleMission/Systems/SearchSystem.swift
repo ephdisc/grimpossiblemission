@@ -24,12 +24,15 @@ class SearchSystem: GameSystem {
         // Process all searchable items
         for entity in entities {
             guard var searchable = entity.components[SearchableComponent.self],
+                  var progress = entity.components[ProgressComponent.self],
                   let itemPos = entity.components[PositionComponent.self] else {
                 continue
             }
 
-            // Skip if already searched
+            // Skip if already searched and grace period done
             if searchable.isSearched {
+                handleCompletedSearch(entity, searchable: &searchable, deltaTime: Float(deltaTime))
+                entity.components.set(searchable)
                 continue
             }
 
@@ -39,77 +42,122 @@ class SearchSystem: GameSystem {
             let distance = sqrt(dx * dx + dy * dy)
 
             // Check if player is in proximity and holding Up
-            if distance <= proximityDistance && playerInput.moveUp {
-                // Start or continue searching
-                if searchable.state == .searchable {
-                    searchable.state = .searching
-                    updateSearchableItemVisual(entity, state: .searching)
+            let isSearching = distance <= proximityDistance && playerInput.moveUp
 
-                    if GameConfig.debugLogging {
-                        print("[Search] Started searching item at (\(itemPos.x), \(itemPos.y))")
-                    }
-                }
-
-                // Increase search progress
-                if searchable.state == .searching {
-                    searchable.searchProgress += Float(deltaTime) / searchable.searchDuration
-                    searchable.searchProgress = min(searchable.searchProgress, 1.0)
-
-                    // Complete search when progress reaches 100%
-                    if searchable.searchProgress >= 1.0 {
-                        searchable.state = .searched
-                        updateSearchableItemVisual(entity, state: .searched)
-
-                        if GameConfig.debugLogging {
-                            print("[Search] Completed searching item at (\(itemPos.x), \(itemPos.y))")
-                        }
-                    }
-                }
-
-                // Update component
-                entity.components.set(searchable)
-
-                // Update debug label
-                updateDebugLabel(entity, searchable: searchable, distance: distance)
-
+            if isSearching {
+                // Player is actively searching
+                handleActiveSearch(entity, searchable: &searchable, progress: &progress,
+                                 itemPos: itemPos, deltaTime: Float(deltaTime))
             } else {
-                // Player moved away or released Up - reset to searchable if was searching
-                if searchable.state == .searching {
-                    searchable.state = .searchable
-                    searchable.searchProgress = 0.0
-                    updateSearchableItemVisual(entity, state: .searchable)
-                    entity.components.set(searchable)
+                // Player stopped searching or not in range
+                handleInactiveSearch(entity, searchable: &searchable, progress: &progress,
+                                   deltaTime: Float(deltaTime))
+            }
 
-                    if GameConfig.debugLogging {
-                        print("[Search] Search interrupted")
-                    }
-                }
+            // Update components
+            entity.components.set(searchable)
+            entity.components.set(progress)
 
-                // Update debug label
-                updateDebugLabel(entity, searchable: searchable, distance: distance)
+            // Update progress bar visual if it exists
+            if let bubble = entity.children.first(where: { $0.name == "ProgressBarBubble" }) {
+                updateProgressBarVisual(bubble, progress: progress.progress)
             }
         }
     }
 
-    private func updateDebugLabel(_ entity: Entity, searchable: SearchableComponent, distance: Float) {
-        guard var debugLabel = entity.components[DebugLabelComponent.self] else {
+    private func handleActiveSearch(_ entity: Entity, searchable: inout SearchableComponent,
+                                   progress: inout ProgressComponent, itemPos: PositionComponent,
+                                   deltaTime: Float) {
+        // Reset grace period timer when actively searching
+        searchable.timeSinceLastSearch = 0.0
+
+        // Start searching if not already
+        if searchable.state == .searchable {
+            searchable.state = .searching
+            updateSearchableItemVisual(entity, state: .searching)
+
+            if GameConfig.debugLogging {
+                print("[Search] Started searching item at (\(itemPos.x), \(itemPos.y))")
+            }
+        }
+
+        // Create progress bar bubble if it doesn't exist
+        if entity.children.first(where: { $0.name == "ProgressBarBubble" }) == nil {
+            let bubble = createProgressBarBubble()
+            entity.addChild(bubble)
+
+            if GameConfig.debugLogging {
+                print("[Search] Created progress bar bubble")
+            }
+        }
+
+        // Increase progress
+        progress.progress += deltaTime / progress.duration
+        progress.progress = min(progress.progress, 1.0)
+
+        // Check if complete
+        if progress.isComplete {
+            searchable.state = .searched
+            updateSearchableItemVisual(entity, state: .searched)
+
+            if GameConfig.debugLogging {
+                print("[Search] Completed searching item at (\(itemPos.x), \(itemPos.y))")
+            }
+        }
+    }
+
+    private func handleInactiveSearch(_ entity: Entity, searchable: inout SearchableComponent,
+                                     progress: inout ProgressComponent, deltaTime: Float) {
+        // Only process if there's progress to manage
+        if !progress.hasStarted {
             return
         }
 
-        let statusText: String
-        switch searchable.state {
-        case .searchable:
-            statusText = "SEARCHABLE"
-        case .searching:
-            statusText = "SEARCHING"
-        case .searched:
-            statusText = "SEARCHED"
+        // Increment grace period timer
+        searchable.timeSinceLastSearch += deltaTime
+
+        // Change state to searchable but keep progress
+        if searchable.state == .searching {
+            searchable.state = .searchable
         }
 
-        let progressPercent = Int(searchable.searchProgress * 100)
-        let distanceText = String(format: "%.1f units", distance)
+        // Check if grace period expired
+        if searchable.isGracePeriodExpired {
+            // Reset progress
+            progress.progress = 0.0
 
-        debugLabel.text = "\(statusText)\n\(progressPercent)%\nDist: \(distanceText)"
-        entity.components.set(debugLabel)
+            // Remove progress bar bubble
+            if let bubble = entity.children.first(where: { $0.name == "ProgressBarBubble" }) {
+                bubble.removeFromParent()
+
+                if GameConfig.debugLogging {
+                    print("[Search] Removed progress bar bubble (grace period expired)")
+                }
+            }
+
+            // Reset timer
+            searchable.timeSinceLastSearch = 0.0
+        }
+    }
+
+    private func handleCompletedSearch(_ entity: Entity, searchable: inout SearchableComponent, deltaTime: Float) {
+        // Fade out and remove bubble
+        if let bubble = entity.children.first(where: { $0.name == "ProgressBarBubble" }),
+           var visualComponent = bubble.components[ProgressBarVisualComponent.self] {
+
+            // Fade out
+            visualComponent.alpha -= deltaTime * visualComponent.fadeSpeed
+
+            if visualComponent.alpha <= 0 {
+                bubble.removeFromParent()
+
+                if GameConfig.debugLogging {
+                    print("[Search] Removed progress bar bubble (fade complete)")
+                }
+            } else {
+                bubble.components.set(visualComponent)
+                // TODO: Apply alpha to visual materials if needed
+            }
+        }
     }
 }
