@@ -49,6 +49,16 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     // Player tag component
     let playerComponent = PlayerComponent()
 
+    // Jump component (for jump state and arc tracking)
+    var jumpComponent = JumpComponent()
+    jumpComponent.arcWidth = GameConfig.jumpArcWidth
+    jumpComponent.arcHeight = GameConfig.jumpArcHeight
+    jumpComponent.state = .falling  // Start falling until collision detection sets to grounded
+
+    // Gravity component (player is affected by gravity)
+    var gravityComponent = GravityComponent()
+    gravityComponent.fallSpeed = GameConfig.fallSpeed
+
     // Collision component (for future collision detection)
     let collisionShape = ShapeResource.generateBox(size: playerSize)
     let collisionComponent = CollisionComponent(shapes: [collisionShape])
@@ -60,6 +70,8 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     player.components.set(inputStateComponent)
     player.components.set(facingComponent)
     player.components.set(playerComponent)
+    player.components.set(jumpComponent)
+    player.components.set(gravityComponent)
     player.components.set(collisionComponent)
 
     // Set initial transform

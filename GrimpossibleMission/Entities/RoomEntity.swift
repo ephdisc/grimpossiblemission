@@ -48,7 +48,8 @@ func createRoomEntity(
         let tile = createTileEntity(
             x: Float(x) + minX,
             y: 0,
-            color: .gray
+            color: .gray,
+            solidType: .floor
         )
         room.addChild(tile)
     }
@@ -58,7 +59,8 @@ func createRoomEntity(
         let tile = createTileEntity(
             x: Float(x) + minX,
             y: Float(GameConfig.roomHeightTiles - 1),
-            color: .gray
+            color: .gray,
+            solidType: .ceiling
         )
         room.addChild(tile)
     }
@@ -74,7 +76,8 @@ func createRoomEntity(
             let tile = createTileEntity(
                 x: minX,
                 y: Float(y),
-                color: .darkGray
+                color: .darkGray,
+                solidType: .wall
             )
             room.addChild(tile)
         }
@@ -91,7 +94,8 @@ func createRoomEntity(
             let tile = createTileEntity(
                 x: maxX - GameConfig.tileSize,
                 y: Float(y),
-                color: .darkGray
+                color: .darkGray,
+                solidType: .wall
             )
             room.addChild(tile)
         }
@@ -111,8 +115,9 @@ func createRoomEntity(
 ///   - x: X position in world units
 ///   - y: Y position in world units
 ///   - color: Color of the tile
-/// - Returns: Tile entity
-private func createTileEntity(x: Float, y: Float, color: UIColor) -> Entity {
+///   - solidType: Type of solid for collision response
+/// - Returns: Tile entity with solid component
+private func createTileEntity(x: Float, y: Float, color: UIColor, solidType: SolidType) -> Entity {
     let tile = Entity()
 
     let tileSize = SIMD3<Float>(
@@ -139,6 +144,12 @@ private func createTileEntity(x: Float, y: Float, color: UIColor) -> Entity {
     let collisionComponent = CollisionComponent(shapes: [collisionShape])
     tile.components.set(collisionComponent)
 
+    // Add solid component for physics collision
+    var solidComponent = SolidComponent()
+    solidComponent.type = solidType
+    solidComponent.bounds = tileSize
+    tile.components.set(solidComponent)
+
     return tile
 }
 
@@ -155,7 +166,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
             let tile = createTileEntity(
                 x: Float(x) + minX,
                 y: 6,
-                color: .systemGreen
+                color: .systemGreen,
+                solidType: .platform
             )
             room.addChild(tile)
         }
@@ -168,7 +180,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
             let tile = createTileEntity(
                 x: Float(x) + minX,
                 y: 8,
-                color: .systemGreen
+                color: .systemGreen,
+                solidType: .platform
             )
             room.addChild(tile)
         }
@@ -178,7 +191,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
             let tile = createTileEntity(
                 x: Float(x) + minX,
                 y: 12,
-                color: .systemGreen
+                color: .systemGreen,
+                solidType: .platform
             )
             room.addChild(tile)
         }

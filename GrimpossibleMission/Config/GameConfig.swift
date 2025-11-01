@@ -29,7 +29,7 @@ struct GameConfig {
     static var roomHeight: Float { Float(roomHeightTiles) * tileSize }
 
     /// Height of entry/doorway between rooms in tiles
-    static let entryHeightTiles: Int = 3
+    static let entryHeightTiles: Int = 6
 
     // MARK: - Player Configuration
 
@@ -60,6 +60,41 @@ struct GameConfig {
 
     /// Jump distance in world units
     static var jumpDistance: Float { Float(jumpDistanceTiles) * tileSize }
+
+    // MARK: - Physics Configuration
+
+    /// Jump arc width in tiles (horizontal distance)
+    static let jumpArcWidthTiles: Float = 2.0
+
+    /// Jump arc height in tiles (vertical peak)
+    static let jumpArcHeightTiles: Float = 3.0
+
+    /// Jump arc width in world units
+    static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }
+
+    /// Jump arc height in world units
+    static var jumpArcHeight: Float { jumpArcHeightTiles * tileSize }
+
+    /// Jump ascent speed in units per second (rise speed)
+    static let jumpAscentSpeed: Float = 8.0
+
+    /// Jump descent speed in units per second (fall speed from jump, faster = heavier feel)
+    static let jumpDescentSpeed: Float = 12.0
+
+    /// Fall speed when not jumping (walking off ledge)
+    static let fallSpeed: Float = 12.0
+
+    /// Lateral movement speed while falling (reduced control)
+    static let fallLateralSpeed: Float = 1.0
+
+    /// Jump buffer time in seconds (press jump before landing)
+    static let jumpBufferTime: Float = 0.1
+
+    /// Coyote time in seconds (can jump after walking off ledge)
+    static let coyoteTime: Float = 0.15
+
+    /// Collision tolerance for snapping to surfaces
+    static let collisionTolerance: Float = 0.1
 
     // MARK: - Camera Configuration
 
@@ -95,7 +130,7 @@ struct GameConfig {
 
     /// Player starting position in room (in tiles from room origin)
     static let playerStartX: Float = 5.0
-    static let playerStartY: Float = 0.0
+    static let playerStartY: Float = 10.0  // Mid-air to test gravity and collision
 
     // MARK: - Debug Configuration
 
