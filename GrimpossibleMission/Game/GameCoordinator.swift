@@ -62,19 +62,23 @@ class GameCoordinator {
         let inputSystem = InputSystem(inputProvider: inputProvider)
         systems.append(inputSystem)
 
-        // 2. Movement system (converts input to velocity)
+        // 2. Jump system (handles jump logic and arc calculation)
+        let jumpSystem = JumpSystem()
+        systems.append(jumpSystem)
+
+        // 3. Movement system (converts input to velocity)
         let movementSystem = MovementSystem()
         systems.append(movementSystem)
 
-        // 3. Physics system (applies velocity to position)
+        // 4. Physics system (applies gravity, velocity, and collision)
         let physicsSystem = PhysicsSystem()
         systems.append(physicsSystem)
 
-        // 4. Search system (handles searchable item interactions)
+        // 5. Search system (handles searchable item interactions)
         let searchSystem = SearchSystem()
         systems.append(searchSystem)
 
-        // 5. Camera system (updates camera based on player position)
+        // 6. Camera system (updates camera based on player position)
         let cameraSystem = CameraManagementSystem(cameraController: cameraController)
         self.cameraManagementSystem = cameraSystem
         systems.append(cameraSystem)

@@ -17,9 +17,13 @@ class SearchSystem: GameSystem {
         // Find player
         guard let player = entities.first(where: { $0.components[PlayerComponent.self] != nil }),
               let playerPos = player.components[PositionComponent.self],
-              let playerInput = player.components[InputStateComponent.self] else {
+              let playerInput = player.components[InputStateComponent.self],
+              var playerVelocity = player.components[VelocityComponent.self] else {
             return
         }
+
+        // Check if player is moving
+        let isPlayerMoving = playerVelocity.dx != 0 || playerVelocity.dy != 0
 
         // Process all searchable items
         for entity in entities {
@@ -41,11 +45,34 @@ class SearchSystem: GameSystem {
             let dy = itemPos.y - playerPos.y
             let distance = sqrt(dx * dx + dy * dy)
 
+            // Cancel search if player is moving
+            if isPlayerMoving && searchable.state == .searching {
+                handleInactiveSearch(entity, searchable: &searchable, progress: &progress,
+                                   deltaTime: Float(deltaTime))
+                entity.components.set(searchable)
+                entity.components.set(progress)
+
+                if GameConfig.debugLogging {
+                    print("[Search] Search cancelled due to player movement")
+                }
+                continue
+            }
+
             // Check if player is in proximity and holding Up
             let isSearching = distance <= proximityDistance && playerInput.moveUp
 
             if isSearching {
-                // Player is actively searching
+                // Player is actively searching - stop player movement
+                if playerVelocity.dx != 0 || playerVelocity.dy != 0 {
+                    playerVelocity.dx = 0
+                    playerVelocity.dy = 0
+                    player.components.set(playerVelocity)
+
+                    if GameConfig.debugLogging {
+                        print("[Search] Player movement stopped for searching")
+                    }
+                }
+
                 handleActiveSearch(entity, searchable: &searchable, progress: &progress,
                                  itemPos: itemPos, deltaTime: Float(deltaTime))
             } else {

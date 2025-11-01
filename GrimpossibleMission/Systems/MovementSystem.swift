@@ -22,26 +22,40 @@ class MovementSystem: GameSystem {
                 continue
             }
 
+            // Check if jumping - if so, JumpSystem controls velocity
+            let jumpComponent = entity.components[JumpComponent.self]
+            if let jump = jumpComponent, jump.state == .jumping {
+                // Don't override jump velocity
+                continue
+            }
+
             // Get horizontal input
             let horizontalInput = inputState.horizontalAxis
 
+            // Determine movement speed based on jump state
+            let moveSpeed: Float
+            if let jump = jumpComponent, jump.state == .falling {
+                // Reduced lateral control when falling
+                moveSpeed = GameConfig.fallLateralSpeed
+            } else {
+                // Full control when grounded
+                moveSpeed = GameConfig.playerMoveSpeed
+            }
+
             // Update velocity based on input (arcade-style: immediate response)
+            // Only when grounded or falling (not jumping)
             if horizontalInput < 0 {
                 // Moving left
-                velocity.dx = -GameConfig.playerMoveSpeed
+                velocity.dx = -moveSpeed
                 facing.direction = .left
             } else if horizontalInput > 0 {
                 // Moving right
-                velocity.dx = GameConfig.playerMoveSpeed
+                velocity.dx = moveSpeed
                 facing.direction = .right
             } else {
                 // Not moving horizontally
                 velocity.dx = 0
             }
-
-            // Vertical movement (for elevator - to be implemented)
-            // For now, no vertical movement in rooms
-            velocity.dy = 0
 
             // Update components
             entity.components.set(velocity)
@@ -71,7 +85,7 @@ class PhysicsSystem: GameSystem {
             var isTouchingLeftWall = false
             var isTouchingRightWall = false
 
-            if let playerComponent = entity.components[PlayerComponent.self] {
+            if entity.components[PlayerComponent.self] != nil {
                 isCurrentlyGrounded = checkGrounded(
                     position: position,
                     solids: solidEntities
@@ -90,12 +104,15 @@ class PhysicsSystem: GameSystem {
                let jump = jumpComponent,
                gravity.isActive {
 
-                // Only apply gravity when not grounded and not jumping
-                if !isCurrentlyGrounded && jump.state != .jumping {
-                    velocity.dy = -gravity.fallSpeed
-                } else {
-                    // No vertical velocity when grounded
-                    velocity.dy = 0
+                // Don't apply gravity when jumping - JumpSystem controls velocity
+                if jump.state != .jumping {
+                    // Only apply gravity when not grounded
+                    if !isCurrentlyGrounded {
+                        velocity.dy = -gravity.fallSpeed
+                    } else {
+                        // No vertical velocity when grounded
+                        velocity.dy = 0
+                    }
                 }
 
                 // Update jump state based on grounded check
@@ -122,7 +139,7 @@ class PhysicsSystem: GameSystem {
             let newY = position.y + velocity.dy * Float(deltaTime)
 
             // Apply collision detection and response if entity has collision
-            if let playerComponent = entity.components[PlayerComponent.self] {
+            if entity.components[PlayerComponent.self] != nil {
                 let result = resolveCollisions(
                     entity: entity,
                     currentPosition: position,
@@ -133,6 +150,19 @@ class PhysicsSystem: GameSystem {
 
                 position = result.position
                 velocity = result.velocity
+
+                // Cancel jump if we hit a ceiling or wall during jump
+                if var jump = jumpComponent {
+                    if jump.state == .jumping && (result.hitCeiling || result.hitWall) {
+                        jump.state = .falling
+                        jumpComponent = jump
+
+                        if GameConfig.debugLogging {
+                            let obstacleType = result.hitCeiling ? "ceiling" : "wall"
+                            print("[Physics] Jump cancelled due to \(obstacleType) collision")
+                        }
+                    }
+                }
             } else {
                 // No collision, just apply velocity
                 position.x = newX
@@ -158,10 +188,12 @@ class PhysicsSystem: GameSystem {
         newPosition: SIMD3<Float>,
         velocity: VelocityComponent,
         solids: [Entity]
-    ) -> (position: PositionComponent, velocity: VelocityComponent) {
+    ) -> (position: PositionComponent, velocity: VelocityComponent, hitCeiling: Bool, hitWall: Bool) {
 
         var finalPosition = newPosition
         var finalVelocity = velocity
+        var hitCeiling = false
+        var hitWall = false
 
         // Get player bounds (assuming 1x2x1 for now)
         let playerHalfWidth: Float = GameConfig.playerWidth / 2.0
@@ -206,6 +238,7 @@ class PhysicsSystem: GameSystem {
                     if velocity.dy > 0 {  // Moving up
                         finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance
                         finalVelocity.dy = 0
+                        hitCeiling = true
                     }
 
                 case .wall:
@@ -221,6 +254,7 @@ class PhysicsSystem: GameSystem {
                             finalPosition.x = solidRight + playerHalfWidth + GameConfig.collisionTolerance
                         }
                         finalVelocity.dx = 0
+                        hitWall = true
                     }
                 }
             }
@@ -228,7 +262,9 @@ class PhysicsSystem: GameSystem {
 
         return (
             position: PositionComponent(x: finalPosition.x, y: finalPosition.y, z: finalPosition.z),
-            velocity: finalVelocity
+            velocity: finalVelocity,
+            hitCeiling: hitCeiling,
+            hitWall: hitWall
         )
     }
 

@@ -64,10 +64,10 @@ struct GameConfig {
     // MARK: - Physics Configuration
 
     /// Jump arc width in tiles (horizontal distance)
-    static let jumpArcWidthTiles: Float = 2.0
+    static let jumpArcWidthTiles: Float = 4.0
 
     /// Jump arc height in tiles (vertical peak)
-    static let jumpArcHeightTiles: Float = 3.0
+    static let jumpArcHeightTiles: Float = 6.0
 
     /// Jump arc width in world units
     static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }
@@ -76,10 +76,12 @@ struct GameConfig {
     static var jumpArcHeight: Float { jumpArcHeightTiles * tileSize }
 
     /// Jump ascent speed in units per second (rise speed)
+    /// DEBUG: Symmetric speed for easier debugging
     static let jumpAscentSpeed: Float = 8.0
 
-    /// Jump descent speed in units per second (fall speed from jump, faster = heavier feel)
-    static let jumpDescentSpeed: Float = 12.0
+    /// Jump descent speed in units per second (fall speed from jump)
+    /// DEBUG: Symmetric speed for easier debugging (same as ascent)
+    static let jumpDescentSpeed: Float = 8.0
 
     /// Fall speed when not jumping (walking off ledge)
     static let fallSpeed: Float = 12.0

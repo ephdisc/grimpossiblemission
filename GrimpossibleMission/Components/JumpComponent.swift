@@ -20,8 +20,8 @@ struct JumpComponent: Component {
     var state: JumpState = .grounded
 
     /// Jump arc parameters (in tiles)
-    var arcWidth: Float = 2.0
-    var arcHeight: Float = 3.0
+    var arcWidth: Float = 3.0
+    var arcHeight: Float = 2.0
 
     /// Progress through jump arc (0.0 = start, 1.0 = end)
     var arcProgress: Float = 0.0
