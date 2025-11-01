@@ -64,7 +64,7 @@ struct GameConfig {
     // MARK: - Camera Configuration
 
     /// Camera distance from the scene (closer = only one room visible)
-    static let cameraDistance: Float = 25.0
+    static let cameraDistance: Float = 17.0
 
     /// Camera Z offset (negative value positions camera in front of scene)
     static var cameraZOffset: Float { -cameraDistance }
