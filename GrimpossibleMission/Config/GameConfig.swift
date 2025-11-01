@@ -80,6 +80,14 @@ struct GameConfig {
     /// Input polling rate in seconds
     static let inputPollRate: TimeInterval = 1.0 / 60.0
 
+    // MARK: - Searchable Item Configuration
+
+    /// How long player must hold "up" to search an item (in seconds)
+    static let searchDuration: Float = 2.0
+
+    /// Distance required to interact with an item (in world units)
+    static let interactionDistance: Float = 2.0
+
     // MARK: - Room Configuration
 
     /// Starting room index

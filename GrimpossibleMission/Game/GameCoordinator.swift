@@ -70,7 +70,11 @@ class GameCoordinator {
         let physicsSystem = PhysicsSystem()
         systems.append(physicsSystem)
 
-        // 4. Camera system (updates camera based on player position)
+        // 4. Search system (handles searchable item interactions)
+        let searchSystem = SearchSystem()
+        systems.append(searchSystem)
+
+        // 5. Camera system (updates camera based on player position)
         let cameraSystem = CameraManagementSystem(cameraController: cameraController)
         self.cameraManagementSystem = cameraSystem
         systems.append(cameraSystem)
@@ -96,6 +100,16 @@ class GameCoordinator {
         if let player = player {
             entities.append(player)
         }
+
+        // Create searchable items for testing
+        let item1 = createSearchableItem(x: 10, y: 1, searchDuration: 2.0)
+        entities.append(item1)
+
+        let item2 = createSearchableItem(x: 25, y: 1, searchDuration: 3.0)
+        entities.append(item2)
+
+        let item3 = createSearchableItem(x: 40, y: 1, searchDuration: 2.5)
+        entities.append(item3)
 
         if GameConfig.debugLogging {
             print("[GameCoordinator] World created: \(entities.count) entities")
@@ -189,5 +203,45 @@ class GameCoordinator {
         }
 
         print("==================")
+    }
+
+    /// Get debug information about the nearest searchable item
+    func getNearestSearchableItemInfo() -> String {
+        guard let player = player,
+              let playerPos = player.components[PositionComponent.self] else {
+            return "No Player"
+        }
+
+        var nearestDistance: Float = .infinity
+        var nearestInfo: String = "No items nearby"
+
+        for entity in entities {
+            guard let searchable = entity.components[SearchableComponent.self],
+                  let itemPos = entity.components[PositionComponent.self] else {
+                continue
+            }
+
+            let dx = itemPos.x - playerPos.x
+            let dy = itemPos.y - playerPos.y
+            let distance = sqrt(dx * dx + dy * dy)
+
+            if distance < nearestDistance {
+                nearestDistance = distance
+                let statusText: String
+                switch searchable.state {
+                case .searchable:
+                    statusText = "SEARCHABLE"
+                case .searching:
+                    statusText = "SEARCHING"
+                case .searched:
+                    statusText = "SEARCHED"
+                }
+
+                let progressPercent = Int(searchable.searchProgress * 100)
+                nearestInfo = String(format: "%@\n%d%%\nDistance: %.1f units", statusText, progressPercent, distance)
+            }
+        }
+
+        return nearestInfo
     }
 }

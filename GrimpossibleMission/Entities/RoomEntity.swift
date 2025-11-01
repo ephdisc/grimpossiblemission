@@ -100,6 +100,9 @@ func createRoomEntity(
     // Add some platform tiles for visual interest
     addPlatformTiles(to: room, roomIndex: roomIndex, minX: minX)
 
+    // Add searchable items
+    addSearchableItems(to: room, roomIndex: roomIndex, minX: minX)
+
     return room
 }
 
@@ -179,6 +182,35 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
             )
             room.addChild(tile)
         }
+    }
+}
+
+/// Adds searchable items to a room.
+/// - Parameters:
+///   - room: Room entity to add items to
+///   - roomIndex: Index of the room
+///   - minX: Minimum X coordinate of the room
+private func addSearchableItems(to room: Entity, roomIndex: Int, minX: Float) {
+    // Room 0: Add items on the floor and on the platform
+    if roomIndex == 0 {
+        // Item on floor at x=8
+        let item1 = createSearchableItemEntity(x: 8 + minX, y: 1)
+        room.addChild(item1)
+
+        // Item on platform at y=7 (on top of platform at y=6)
+        let item2 = createSearchableItemEntity(x: 12 + minX, y: 7)
+        room.addChild(item2)
+    }
+
+    // Room 1: Add items on platforms
+    if roomIndex == 1 {
+        // Item on first platform at y=9 (on top of platform at y=8)
+        let item3 = createSearchableItemEntity(x: 7 + minX, y: 9)
+        room.addChild(item3)
+
+        // Item on second platform at y=13 (on top of platform at y=12)
+        let item4 = createSearchableItemEntity(x: 22 + minX, y: 13)
+        room.addChild(item4)
     }
 }
 
