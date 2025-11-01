@@ -22,32 +22,28 @@ class OrthographicCameraController: CameraController {
         cameraEntity = Entity()
 
         // Set up perspective camera component
-        // Note: RealityKit doesn't have built-in orthographic camera on tvOS
-        // We'll use a perspective camera positioned far back to minimize distortion
         let cameraComponent = PerspectiveCameraComponent()
         cameraEntity.components.set(cameraComponent)
 
-        // Calculate initial camera position
-        // Position camera to view Room 0 (x: 0-32, y: 0-18)
-        let roomCenterX: Float = GameConfig.roomWidth / 2.0
-        let roomCenterY: Float = GameConfig.roomHeight / 2.0
+        // Calculate initial camera position for Room 0
+        let roomCenterX = GameConfig.roomWidth / 2.0
+        let roomCenterY = GameConfig.roomHeight / 2.0
 
-        // Camera positioned in front (negative Z) and above, tilted down
-        let distance = GameConfig.cameraDistance
-        let tiltRadians = GameConfig.cameraTiltDegrees * .pi / 270.0
-
-        // Calculate camera position with tilt
-        let cameraX = roomCenterX
-        let cameraY = roomCenterY + distance * sin(tiltRadians)
-        let cameraZ = -distance * cos(tiltRadians)
-
-        currentPosition = SIMD3<Float>(cameraX, cameraY, cameraZ)
+        // Camera positioned in front (negative Z), no tilt
+        currentPosition = SIMD3<Float>(
+            roomCenterX,
+            roomCenterY,
+            GameConfig.cameraZOffset
+        )
         targetPosition = currentPosition
         cameraEntity.position = currentPosition
 
-        // Set camera rotation ONCE at initialization (fixed orientation)
-        // Camera looks toward z=0 from negative z position with downward tilt
-        cameraEntity.look(at: SIMD3<Float>(roomCenterX, roomCenterY, 0), from: currentPosition, relativeTo: nil)
+        // Set camera to look at room center
+        cameraEntity.look(
+            at: SIMD3<Float>(roomCenterX, roomCenterY, 0),
+            from: currentPosition,
+            relativeTo: nil
+        )
     }
 
     /// Register room bounds for camera management
@@ -66,20 +62,20 @@ class OrthographicCameraController: CameraController {
         let lerpFactor = min(Float(deltaTime / GameConfig.cameraTransitionDuration), 1.0)
         currentPosition = simd_mix(currentPosition, targetPosition, SIMD3<Float>(repeating: lerpFactor))
 
-        // Update position only - rotation is fixed from initialization
+        // Update position
         cameraEntity.position = currentPosition
+
+        // Update look-at target to keep camera centered on current X position
+        let roomCenterY = Float(GameConfig.roomHeight) / 2.0
+        let lookAtTarget = SIMD3<Float>(currentPosition.x, roomCenterY, 0)
+        cameraEntity.look(at: lookAtTarget, from: currentPosition, relativeTo: nil)
     }
 
     private func updateTargetPosition(for mode: CameraMode) {
-        let distance = GameConfig.cameraDistance
-        let tiltRadians = GameConfig.cameraTiltDegrees * .pi / 180.0
-
         switch mode {
         case .staticRoom(let roomIndex):
             // Position camera to view entire room
             let roomCenterX: Float
-            let roomCenterY: Float = GameConfig.roomHeight / 2.0
-
             if roomIndex < rooms.count {
                 let room = rooms[roomIndex]
                 roomCenterX = room.center.x
@@ -88,20 +84,20 @@ class OrthographicCameraController: CameraController {
                 roomCenterX = Float(roomIndex) * GameConfig.roomWidth + GameConfig.roomWidth / 2.0
             }
 
-            let cameraX = roomCenterX
-            let cameraY = roomCenterY + distance * sin(tiltRadians)
-            let cameraZ = -distance * cos(tiltRadians)
-
-            targetPosition = SIMD3<Float>(cameraX, cameraY, cameraZ)
+            targetPosition = SIMD3<Float>(
+                roomCenterX,
+                GameConfig.roomHeight / 2.0,
+                GameConfig.cameraZOffset
+            )
 
         case .followPlayer:
             // For follow mode, position camera behind and above player
             // This will be used for elevator shafts in future
-            let cameraX: Float = 0.0 // Will track player X later
-            let cameraY = distance * sin(tiltRadians)
-            let cameraZ = -distance * cos(tiltRadians)
-
-            targetPosition = SIMD3<Float>(cameraX, cameraY, cameraZ)
+            targetPosition = SIMD3<Float>(
+                0.0,
+                GameConfig.roomHeight / 2.0,
+                GameConfig.cameraZOffset
+            )
         }
     }
 

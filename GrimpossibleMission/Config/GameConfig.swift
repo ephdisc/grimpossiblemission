@@ -63,17 +63,14 @@ struct GameConfig {
 
     // MARK: - Camera Configuration
 
-    /// Camera field of view (for orthographic scale)
-    static let cameraOrthographicScale: Float = 20.0
-
-    /// Camera tilt angle in degrees (downward angle to see top and front)
-    static let cameraTiltDegrees: Float = 35.0
-
     /// Camera distance from the scene (closer = only one room visible)
     static let cameraDistance: Float = 25.0
 
+    /// Camera Z offset (negative value positions camera in front of scene)
+    static var cameraZOffset: Float { -cameraDistance }
+
     /// Camera transition duration in seconds
-    static let cameraTransitionDuration: TimeInterval = 0.8
+    static let cameraTransitionDuration: TimeInterval = 0.2
 
     // MARK: - Input Configuration
 
