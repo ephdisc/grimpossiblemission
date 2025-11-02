@@ -47,18 +47,18 @@ struct GameConfig {
 
     /// Player movement speed in units per second (grounded only)
     /// Trajectory is locked when airborne (committed jumps)
-    static let playerMoveSpeed: Float = 8.0
+    static let playerMoveSpeed: Float = 6.0
 
     // MARK: - Jump & Physics Configuration
 
     /// Jump velocity (upward impulse when jump is pressed)
-    static let jumpVelocity: Float = playerMoveSpeed
+    static let jumpVelocity: Float = 14.0
 
     /// Gravity acceleration (constant downward pull when airborne)
-    static let gravity: Float = 12.0
+    static let gravity: Float = 28.0
 
     /// Maximum fall speed (terminal velocity)
-    static let maxFallSpeed: Float = 20.0
+    static let maxFallSpeed: Float = 30.0
 
     /// Jump buffer time in seconds (press jump before landing)
     static let jumpBufferTime: Float = 0.1
