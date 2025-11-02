@@ -11,12 +11,9 @@ import RealityKit
 /// System that processes input and updates entity velocity and facing direction.
 ///
 /// RESPONSIBILITY:
-/// - Converts player input to horizontal velocity
+/// - Converts player input to horizontal velocity (when grounded only)
 /// - Updates facing direction based on input
-/// - Applies different movement speeds based on jump state:
-///   * grounded: full speed control
-///   * ascending: NO control (JumpSystem manages velocity)
-///   * falling: limited lateral control
+/// - No air control - trajectory locked once airborne
 class MovementSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
@@ -29,23 +26,17 @@ class MovementSystem: GameSystem {
                 continue
             }
 
-            // JumpSystem controls velocity during ascending phase
-            if jumpComponent.state == .ascending {
-                continue
+            // Only allow horizontal control when grounded
+            // Once airborne, trajectory is locked until landing
+            if jumpComponent.state != .grounded {
+                continue  // No air control
             }
 
             // Get horizontal input
             let horizontalInput = inputState.horizontalAxis
 
-            // Determine movement speed based on state
-            let moveSpeed: Float = switch jumpComponent.state {
-            case .grounded:
-                GameConfig.playerMoveSpeed  // Full control
-            case .falling:
-                GameConfig.fallLateralSpeed  // Reduced control
-            case .ascending:
-                0.0  // No control (shouldn't reach here due to continue above)
-            }
+            // Player has full horizontal control when grounded
+            let moveSpeed = GameConfig.playerMoveSpeed
 
             // Update velocity based on input (arcade-style: immediate response)
             if horizontalInput < 0 {
@@ -68,15 +59,14 @@ class MovementSystem: GameSystem {
 /// System that applies physics: gravity, velocity to position, and collision detection.
 ///
 /// RESPONSIBILITY:
-/// - Applies consistent gravity when NOT ascending
+/// - Applies constant gravity acceleration when airborne
 /// - Detects and resolves all collisions via AABB
 /// - Updates jump states based on COLLISION RESULTS (collision is source of truth)
 /// - Applies velocity to position
 ///
 /// COLLISION-BASED STATE TRANSITIONS:
-/// - hitFloor detected → grounded (if not ascending or past arc peak)
-/// - hitCeiling/hitWall during ascending → falling
-/// - No hitFloor when grounded → falling (walked off edge)
+/// - hitFloor detected → grounded
+/// - No hitFloor when grounded → airborne (walked off edge)
 class PhysicsSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
@@ -101,21 +91,18 @@ class PhysicsSystem: GameSystem {
                 isTouchingRightWall = wallCheck.right
             }
 
-            // STEP 2: Apply gravity (state-based, not proximity-based)
-            if let gravity = entity.components[GravityComponent.self],
-               let jump = jumpComponent,
-               gravity.isActive {
+            // STEP 2: Apply gravity acceleration (constant downward pull when airborne)
+            if entity.components[GravityComponent.self] != nil,
+               let jump = jumpComponent {
 
-                // Gravity only applies when NOT following an arc (JumpSystem controls arc velocity)
-                // Arc is active when ascending OR when falling with arcProgress < 1.0
-                let isFollowingArc = jump.state == .ascending || (jump.state == .falling && jump.arcProgress < 1.0)
+                if jump.state == .grounded {
+                    velocity.dy = 0  // No vertical velocity when grounded
+                } else {
+                    // Apply gravity acceleration (downward pull)
+                    velocity.dy -= GameConfig.gravity * Float(deltaTime)
 
-                if !isFollowingArc {
-                    if jump.state == .grounded {
-                        velocity.dy = 0  // No vertical velocity when grounded
-                    } else {
-                        velocity.dy = -gravity.fallSpeed  // Consistent falling speed (only after arc completes)
-                    }
+                    // Clamp to terminal velocity
+                    velocity.dy = max(velocity.dy, -GameConfig.maxFallSpeed)
                 }
             }
 
@@ -148,54 +135,19 @@ class PhysicsSystem: GameSystem {
                 if var jump = jumpComponent {
                     // Hit floor/platform from above → grounded
                     if result.hitFloor {
-                        // Only allow landing during arc if descending (prevents immediate re-ground at jump start)
-                        if jump.state == .ascending && jump.arcProgress >= 0.5 {
+                        if jump.state == .airborne {
                             if GameConfig.debugLogging {
-                                print("[Physics] Landed on platform during arc - ascending -> grounded")
-                            }
-                            jump.state = .grounded
-                            velocity.dx = 0  // Stop arc horizontal velocity
-                        } else if jump.state == .falling {
-                            if GameConfig.debugLogging {
-                                print("[Physics] Landed on floor - falling -> grounded")
+                                print("[Physics] Landed on floor - airborne -> grounded")
                             }
                             jump.state = .grounded
                         }
-                    }
-                    // Hit ceiling or wall during arc → falling
-                    else if jump.state == .ascending && (result.hitCeiling || result.hitWall) {
-                        if GameConfig.debugLogging {
-                            let obstacle = result.hitCeiling ? "ceiling" : "wall"
-                            print("[Physics] Hit \(obstacle) during arc - ascending -> falling")
-                        }
-                        jump.state = .falling
-
-                        // Initialize falling arc from current position
-                        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
-                        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
-                        jump.jumpTargetPosition = SIMD3<Float>(
-                            position.x,
-                            playerBottomY - GameConfig.roomHeight,
-                            position.z
-                        )
-                        jump.arcProgress = 0.5  // Start at peak for consistent descent
                     }
                     // No floor collision but was grounded → walked off edge
                     else if !result.hitFloor && jump.state == .grounded {
                         if GameConfig.debugLogging {
-                            print("[Physics] No floor contact - grounded -> falling")
+                            print("[Physics] No floor contact - grounded -> airborne")
                         }
-                        jump.state = .falling
-
-                        // Initialize falling arc at peak (t=0.5) so descent matches jump arc
-                        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
-                        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
-                        jump.jumpTargetPosition = SIMD3<Float>(
-                            position.x,
-                            playerBottomY - GameConfig.roomHeight,
-                            position.z
-                        )
-                        jump.arcProgress = 0.5  // Start at peak of arc
+                        jump.state = .airborne
                     }
 
                     jumpComponent = jump

@@ -2,19 +2,19 @@
 //  JumpSystem.swift
 //  GrimpossibleMission
 //
-//  ECS System that handles committed jump arcs.
+//  ECS System that handles impulse-based jumping.
 //
 //  RESPONSIBILITY:
-//  - Detects jump input and initiates jumps
-//  - Controls velocity during FULL parabolic arc (t=0 to t=1.0)
-//  - Transitions to falling when arc completes OR interrupted by collision
+//  - Detects jump input and applies velocity impulse (upward + horizontal)
+//  - Always jumps at full speed in facing direction (even when standing still)
 //  - Manages jump buffering and coyote time
+//  - Simple and predictable jump physics
 //
 
 import Foundation
 import RealityKit
 
-/// System that manages jumping with committed arcs
+/// System that manages impulse-based jumping
 class JumpSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
@@ -22,8 +22,7 @@ class JumpSystem: GameSystem {
             guard var jumpComponent = entity.components[JumpComponent.self],
                   var velocity = entity.components[VelocityComponent.self],
                   let inputState = entity.components[InputStateComponent.self],
-                  let facing = entity.components[FacingDirectionComponent.self],
-                  let position = entity.components[PositionComponent.self] else {
+                  let facing = entity.components[FacingDirectionComponent.self] else {
                 continue
             }
 
@@ -31,12 +30,7 @@ class JumpSystem: GameSystem {
             updateTimers(&jumpComponent, deltaTime: Float(deltaTime))
 
             // Handle jump input
-            handleJumpInput(&jumpComponent, inputState: inputState, position: position, facing: facing)
-
-            // Update jump arc if currently ascending or falling with an active arc
-            if jumpComponent.state == .ascending || jumpComponent.state == .falling {
-                updateJumpArc(&jumpComponent, velocity: &velocity, deltaTime: Float(deltaTime))
-            }
+            handleJumpInput(&jumpComponent, velocity: &velocity, inputState: inputState, facing: facing)
 
             // Update components
             entity.components.set(jumpComponent)
@@ -46,11 +40,11 @@ class JumpSystem: GameSystem {
 
     // MARK: - Jump Input Handling
 
-    /// Handles jump button press and initiates jumps
+    /// Handles jump button press and applies upward impulse
     private func handleJumpInput(
         _ jump: inout JumpComponent,
+        velocity: inout VelocityComponent,
         inputState: InputStateComponent,
-        position: PositionComponent,
         facing: FacingDirectionComponent
     ) {
         // Detect jump button press (rising edge)
@@ -59,7 +53,7 @@ class JumpSystem: GameSystem {
 
             // Try to start jump if grounded or within coyote time
             if jump.canJump {
-                startJump(&jump, position: position, facing: facing)
+                applyJumpImpulse(&jump, velocity: &velocity, facing: facing)
             } else {
                 // Buffer the jump input for when we land
                 jump.jumpBufferTimer = GameConfig.jumpBufferTime
@@ -70,78 +64,25 @@ class JumpSystem: GameSystem {
 
         // Check jump buffer when landing
         if jump.state == .grounded && jump.jumpBufferTimer > 0 {
-            startJump(&jump, position: position, facing: facing)
+            applyJumpImpulse(&jump, velocity: &velocity, facing: facing)
         }
     }
 
-    /// Initiates a jump with committed arc
-    private func startJump(_ jump: inout JumpComponent, position: PositionComponent, facing: FacingDirectionComponent) {
-        jump.state = .ascending
-        jump.arcProgress = 0.0
+    /// Applies upward and horizontal velocity impulse for jump
+    private func applyJumpImpulse(_ jump: inout JumpComponent, velocity: inout VelocityComponent, facing: FacingDirectionComponent) {
+        jump.state = .airborne
         jump.jumpBufferTimer = 0.0
 
-        // Arc starts from player's feet (bottom center)
-        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
-        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
+        // Apply upward impulse
+        velocity.dy = GameConfig.jumpVelocity
 
-        // Calculate target landing position based on facing direction
-        // Arc ends 1 room height below the start position
-        let horizontalDistance = facing.direction == .right ? jump.arcWidth : -jump.arcWidth
-        jump.jumpTargetPosition = SIMD3<Float>(
-            position.x + horizontalDistance,
-            playerBottomY - GameConfig.roomHeight,
-            position.z
-        )
+        // Apply full horizontal speed in facing direction
+        velocity.dx = facing.direction == .right ? GameConfig.playerMoveSpeed : -GameConfig.playerMoveSpeed
 
         if GameConfig.debugLogging {
-            print("[Jump] Started jump - Arc: \(jump.arcWidth)w × \(jump.arcHeight)h, ends \(GameConfig.roomHeight) below start")
+            let direction = facing.direction == .right ? "right" : "left"
+            print("[Jump] Applied jump impulse: dy=\(GameConfig.jumpVelocity), dx=\(velocity.dx) (\(direction))")
         }
-    }
-
-    // MARK: - Jump Arc Physics
-
-    /// Updates velocity based on jump arc progress (full parabolic arc)
-    private func updateJumpArc(_ jump: inout JumpComponent, velocity: inout VelocityComponent, deltaTime: Float) {
-        // Calculate total arc duration
-        let totalDistance = jump.arcWidth
-        let averageSpeed = (GameConfig.jumpAscentSpeed + GameConfig.jumpDescentSpeed) / 2.0
-        let totalDuration = totalDistance / averageSpeed
-
-        // Update arc progress
-        jump.arcProgress += deltaTime / totalDuration
-        jump.arcProgress = min(jump.arcProgress, 1.0)
-
-        let t = jump.arcProgress
-        let startPos = jump.jumpStartPosition
-        let targetPos = jump.jumpTargetPosition
-
-        // Check if we've completed the full arc (t >= 1.0)
-        if t >= 1.0 {
-            // Arc completed - transition to falling (gravity takes over)
-            jump.state = .falling
-            velocity.dx = 0  // Stop horizontal movement
-            velocity.dy = 0  // Gravity will apply next frame
-
-            if GameConfig.debugLogging {
-                print("[Jump] Arc completed, transitioning to falling")
-            }
-            return
-        }
-
-        // Continue following the parabolic arc
-        // Horizontal velocity (constant direction throughout arc)
-        let direction: Float = (targetPos.x - startPos.x) > 0 ? 1.0 : -1.0
-        velocity.dx = direction * totalDistance / totalDuration
-
-        // Vertical velocity from derivative of parabola
-        // Arc goes from startY at t=0, peaks at startY + arcHeight at t=0.5, ends at startY - roomHeight at t=1.0
-        // Parabola: h(t) = (-4*arcHeight - 2*roomHeight)t² + (4*arcHeight + roomHeight)t
-        // Derivative: dh/dt = (-8*arcHeight - 4*roomHeight)t + (4*arcHeight + roomHeight)
-        // Velocity: dh/dt / totalDuration
-        let arcHeight = jump.arcHeight
-        let roomHeight = GameConfig.roomHeight
-        let heightDerivative = (-8.0 * arcHeight - 4.0 * roomHeight) * t + (4.0 * arcHeight + roomHeight)
-        velocity.dy = heightDerivative / totalDuration
     }
 
     // MARK: - Timer Management
@@ -154,8 +95,8 @@ class JumpSystem: GameSystem {
             jump.jumpBufferTimer = max(jump.jumpBufferTimer, 0)
         }
 
-        // Update coyote timer (only when falling)
-        if jump.state == .falling {
+        // Update coyote timer (only when airborne)
+        if jump.state == .airborne {
             if jump.coyoteTimer > 0 {
                 jump.coyoteTimer -= deltaTime
                 jump.coyoteTimer = max(jump.coyoteTimer, 0)

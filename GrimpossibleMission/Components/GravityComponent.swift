@@ -8,11 +8,8 @@
 import RealityKit
 
 /// Component that marks entities as affected by gravity.
-/// Entities with this component will fall when not grounded.
+/// The presence of this component indicates gravity acceleration should be applied when airborne.
+/// Gravity value is configured in GameConfig.gravity
 struct GravityComponent: Component {
-    /// Fall speed in units per second
-    var fallSpeed: Float = 12.0
-
-    /// Whether gravity is currently being applied
-    var isActive: Bool = true
+    // No fields needed - component presence is the flag
 }

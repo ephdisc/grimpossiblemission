@@ -45,43 +45,20 @@ struct GameConfig {
     /// Player width in world units
     static var playerWidth: Float { Float(playerWidthTiles) * tileSize }
 
-    /// Player movement speed in units per second (Mario-ish feel)
-    /// Tuned so player can traverse 2 tiles in a reasonable time
+    /// Player movement speed in units per second (grounded only)
+    /// Trajectory is locked when airborne (committed jumps)
     static let playerMoveSpeed: Float = 8.0
 
-    // MARK: - Physics Configuration
+    // MARK: - Jump & Physics Configuration
 
-    /// Jump arc width in tiles (horizontal distance)
-    static let jumpArcWidthTiles: Float = 100.0
+    /// Jump velocity (upward impulse when jump is pressed)
+    static let jumpVelocity: Float = 16.0
 
-    /// Jump arc height in tiles (vertical peak above start position)
-    static let jumpArcHeightTiles: Float = 2.0
+    /// Gravity acceleration (constant downward pull when airborne)
+    static let gravity: Float = 12.0
 
-    /// Jump arc width in world units
-    static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }
-
-    /// Jump arc height in world units
-    static var jumpArcHeight: Float { jumpArcHeightTiles * tileSize }
-
-    /// Jump ascent speed in units per second (rise speed)
-    /// DEBUG: Symmetric speed for easier debugging
-    static let jumpAscentSpeed: Float = 8.0
-
-    /// Jump descent speed in units per second (fall speed from jump)
-    /// DEBUG: Symmetric speed for easier debugging (same as ascent)
-    static let jumpDescentSpeed: Float = 8.0
-
-    /// Fall speed when not jumping (walking off ledge)
-    /// Calculated to match the AVERAGE vertical velocity during arc descent
-    /// During descent (t=0.5 to t=1.0), velocity goes from 0 to max, so average is max/2
-    /// Formula: 2 * arcHeight * averageSpeed / arcWidth
-    static var fallSpeed: Float {
-        let averageSpeed = (jumpAscentSpeed + jumpDescentSpeed) / 2.0
-        return 2.0 * jumpArcHeight * averageSpeed / jumpArcWidth
-    }
-
-    /// Lateral movement speed while falling (reduced control)
-    static let fallLateralSpeed: Float = 1.0
+    /// Maximum fall speed (terminal velocity)
+    static let maxFallSpeed: Float = 20.0
 
     /// Jump buffer time in seconds (press jump before landing)
     static let jumpBufferTime: Float = 0.1
@@ -90,7 +67,7 @@ struct GameConfig {
     static let coyoteTime: Float = 0.15
 
     /// Collision tolerance for snapping to surfaces
-    static let collisionTolerance: Float = 0.1
+    static let collisionTolerance: Float = 0.01
 
     // MARK: - Camera Configuration
 

@@ -185,8 +185,8 @@ class GameCoordinator {
             return
         }
 
-        // Detect jump start
-        let isJumping = jump.state == .ascending
+        // Detect jump start (transition to airborne from grounded)
+        let isJumping = jump.state == .airborne
         if isJumping && !wasJumping {
             // Jump just started - reset tracking
             minVelocityX = velocity.dx

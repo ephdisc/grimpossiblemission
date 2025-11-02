@@ -14,35 +14,13 @@ import UIKit
 class DebugVisualizationSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
-        // Only process if debug visualization is enabled
-        guard GameConfig.debugJumpArc else {
-            // Remove any existing visualizations if debug was turned off
-            for entity in entities {
-                removeJumpArc(from: entity)
-            }
-            return
-        }
+        // Debug visualization disabled for impulse-based jumping
+        // TODO: Implement predicted trajectory visualization based on physics simulation
+        // (would show parabolic arc from initial jump velocity + gravity)
 
+        // Clean up any existing arcs
         for entity in entities {
-            guard let jumpComponent = entity.components[JumpComponent.self],
-                  let position = entity.components[PositionComponent.self],
-                  let facing = entity.components[FacingDirectionComponent.self] else {
-                continue
-            }
-
-            // Only show arc when grounded (shows where player would jump)
-            if jumpComponent.state == .grounded {
-                updateJumpArcVisualization(
-                    on: entity,
-                    position: position,
-                    facing: facing,
-                    arcWidth: jumpComponent.arcWidth,
-                    arcHeight: jumpComponent.arcHeight
-                )
-            } else {
-                // Don't update arc while jumping/falling - it stays frozen in world space
-                // Arc will be removed when player lands (transitions back to grounded)
-            }
+            removeJumpArc(from: entity)
         }
     }
 

@@ -49,20 +49,17 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     // Player tag component
     let playerComponent = PlayerComponent()
 
-    // Jump component (for jump state and arc tracking)
+    // Jump component (for jump state tracking)
     var jumpComponent = JumpComponent()
-    jumpComponent.arcWidth = GameConfig.jumpArcWidth
-    jumpComponent.arcHeight = GameConfig.jumpArcHeight
-    jumpComponent.state = .falling  // Start falling until collision detection sets to grounded
+    jumpComponent.state = .airborne  // Start airborne until collision detection sets to grounded
 
     if GameConfig.debugLogging {
-        print("[PlayerEntity] Created player with jump arc: \(jumpComponent.arcWidth)w × \(jumpComponent.arcHeight)h")
-        print("[PlayerEntity] GameConfig values: \(GameConfig.jumpArcWidthTiles) tiles × \(GameConfig.jumpArcHeightTiles) tiles")
+        print("[PlayerEntity] Created player with impulse-based jumping")
+        print("[PlayerEntity] Jump velocity: \(GameConfig.jumpVelocity), Gravity: \(GameConfig.gravity)")
     }
 
     // Gravity component (player is affected by gravity)
-    var gravityComponent = GravityComponent()
-    gravityComponent.fallSpeed = GameConfig.fallSpeed
+    let gravityComponent = GravityComponent()
 
     // Collision component (for future collision detection)
     let collisionShape = ShapeResource.generateBox(size: playerSize)
