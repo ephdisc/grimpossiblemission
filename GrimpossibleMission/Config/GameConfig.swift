@@ -52,7 +52,7 @@ struct GameConfig {
     // MARK: - Jump & Physics Configuration
 
     /// Jump velocity (upward impulse when jump is pressed)
-    static let jumpVelocity: Float = 16.0
+    static let jumpVelocity: Float = playerMoveSpeed
 
     /// Gravity acceleration (constant downward pull when airborne)
     static let gravity: Float = 12.0

@@ -101,9 +101,25 @@ class GameCoordinator {
     }
 
     private func setupWorld() {
-        // Create rooms
-        roomEntities = createPOCRooms()
-        entities.append(contentsOf: roomEntities)
+        // Load level from JSON
+        if let levelData = LevelLoader.loadLevel(filename: "level_001") {
+            // Create rooms and searchable items from level data
+            let result = createRoomsFromLevel(levelData: levelData)
+            roomEntities = result.rooms
+            entities.append(contentsOf: roomEntities)
+
+            // Add searchable items to entities (not room children)
+            entities.append(contentsOf: result.searchables)
+
+            if GameConfig.debugLogging {
+                print("[GameCoordinator] Loaded level with \(roomEntities.count) rooms and \(result.searchables.count) searchable items")
+            }
+        } else {
+            // Fallback to hardcoded POC rooms if JSON loading fails
+            print("[GameCoordinator] Warning: Failed to load level JSON, using POC rooms")
+            roomEntities = createPOCRooms()
+            entities.append(contentsOf: roomEntities)
+        }
 
         // Register rooms with camera system
         cameraManagementSystem?.registerRoomEntities(roomEntities)
@@ -116,16 +132,6 @@ class GameCoordinator {
         if let player = player {
             entities.append(player)
         }
-
-        // Create searchable items for testing
-        let item1 = createSearchableItem(x: 10, y: 1, searchDuration: 2.0)
-        entities.append(item1)
-
-        let item2 = createSearchableItem(x: 25, y: 1, searchDuration: 3.0)
-        entities.append(item2)
-
-        let item3 = createSearchableItem(x: 40, y: 1, searchDuration: 2.5)
-        entities.append(item3)
 
         if GameConfig.debugLogging {
             print("[GameCoordinator] World created: \(entities.count) entities")
