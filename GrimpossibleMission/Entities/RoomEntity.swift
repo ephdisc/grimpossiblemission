@@ -46,7 +46,7 @@ func createRoomEntity(
     // Create floor tiles (bottom row)
     for x in 0..<GameConfig.roomWidthTiles {
         let tile = createTileEntity(
-            x: Float(x) + minX,
+            x: Float(x) * GameConfig.tileSize + minX,
             y: 0,
             color: .gray,
             solidType: .floor
@@ -57,8 +57,8 @@ func createRoomEntity(
     // Create ceiling tiles (top row)
     for x in 0..<GameConfig.roomWidthTiles {
         let tile = createTileEntity(
-            x: Float(x) + minX,
-            y: Float(GameConfig.roomHeightTiles - 1),
+            x: Float(x) * GameConfig.tileSize + minX,
+            y: Float(GameConfig.roomHeightTiles - 1) * GameConfig.tileSize,
             color: .gray,
             solidType: .ceiling
         )
@@ -75,7 +75,7 @@ func createRoomEntity(
 
             let tile = createTileEntity(
                 x: minX,
-                y: Float(y),
+                y: Float(y) * GameConfig.tileSize,
                 color: .darkGray,
                 solidType: .wall
             )
@@ -93,7 +93,7 @@ func createRoomEntity(
 
             let tile = createTileEntity(
                 x: maxX - GameConfig.tileSize,
-                y: Float(y),
+                y: Float(y) * GameConfig.tileSize,
                 color: .darkGray,
                 solidType: .wall
             )
@@ -164,8 +164,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
         // Platform at y=6, spanning tiles 10-15
         for x in 10...15 {
             let tile = createTileEntity(
-                x: Float(x) + minX,
-                y: 6,
+                x: Float(x) * GameConfig.tileSize + minX,
+                y: 6 * GameConfig.tileSize,
                 color: .systemGreen,
                 solidType: .platform
             )
@@ -178,8 +178,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
         // Platform at y=8, spanning tiles 5-10
         for x in 5...10 {
             let tile = createTileEntity(
-                x: Float(x) + minX,
-                y: 8,
+                x: Float(x) * GameConfig.tileSize + minX,
+                y: 8 * GameConfig.tileSize,
                 color: .systemGreen,
                 solidType: .platform
             )
@@ -189,8 +189,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
         // Platform at y=12, spanning tiles 20-25
         for x in 20...25 {
             let tile = createTileEntity(
-                x: Float(x) + minX,
-                y: 12,
+                x: Float(x) * GameConfig.tileSize + minX,
+                y: 12 * GameConfig.tileSize,
                 color: .systemGreen,
                 solidType: .platform
             )
@@ -205,8 +205,8 @@ private func addPlatformTiles(to room: Entity, roomIndex: Int, minX: Float) {
         for x in 10...15 {
             for y in 5...7 {  // 3 tiles high
                 let tile = createTileEntity(
-                    x: Float(x) + minX,
-                    y: Float(y),
+                    x: Float(x) * GameConfig.tileSize + minX,
+                    y: Float(y) * GameConfig.tileSize,
                     color: .systemBlue,
                     solidType: .block
                 )
@@ -225,22 +225,22 @@ private func addSearchableItems(to room: Entity, roomIndex: Int, minX: Float) {
     // Room 0: Add items on the floor and on the platform
     if roomIndex == 0 {
         // Item on floor at x=8
-        let item1 = createSearchableItem(x: 8 + minX, y: 1)
+        let item1 = createSearchableItem(x: 8 * GameConfig.tileSize + minX, y: 1 * GameConfig.tileSize)
         room.addChild(item1)
 
         // Item on platform at y=7 (on top of platform at y=6)
-        let item2 = createSearchableItem(x: 12 + minX, y: 7)
+        let item2 = createSearchableItem(x: 12 * GameConfig.tileSize + minX, y: 7 * GameConfig.tileSize)
         room.addChild(item2)
     }
 
     // Room 1: Add items on platforms
     if roomIndex == 1 {
         // Item on first platform at y=9 (on top of platform at y=8)
-        let item3 = createSearchableItem(x: 7 + minX, y: 9)
+        let item3 = createSearchableItem(x: 7 * GameConfig.tileSize + minX, y: 9 * GameConfig.tileSize)
         room.addChild(item3)
 
         // Item on second platform at y=13 (on top of platform at y=12)
-        let item4 = createSearchableItem(x: 22 + minX, y: 13)
+        let item4 = createSearchableItem(x: 22 * GameConfig.tileSize + minX, y: 13 * GameConfig.tileSize)
         room.addChild(item4)
     }
 }

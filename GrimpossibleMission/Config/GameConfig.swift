@@ -13,31 +13,31 @@ struct GameConfig {
 
     // MARK: - World Dimensions
 
-    /// Size of a single tile in world units
-    static let tileSize: Float = 1.0
+    /// Size of a single tile in world units (halved for double resolution)
+    static let tileSize: Float = 0.5
 
-    /// Room width in tiles (16:9 aspect ratio)
-    static let roomWidthTiles: Int = 32
+    /// Room width in tiles (16:9 aspect ratio, doubled resolution)
+    static let roomWidthTiles: Int = 64
 
-    /// Room height in tiles (16:9 aspect ratio)
-    static let roomHeightTiles: Int = 18
+    /// Room height in tiles (16:9 aspect ratio, doubled resolution)
+    static let roomHeightTiles: Int = 36
 
-    /// Room width in world units
+    /// Room width in world units (stays 32.0)
     static var roomWidth: Float { Float(roomWidthTiles) * tileSize }
 
-    /// Room height in world units
+    /// Room height in world units (stays 18.0)
     static var roomHeight: Float { Float(roomHeightTiles) * tileSize }
 
-    /// Height of entry/doorway between rooms in tiles
-    static let entryHeightTiles: Int = 6
+    /// Height of entry/doorway between rooms in tiles (doubled)
+    static let entryHeightTiles: Int = 12
 
     // MARK: - Player Configuration
 
-    /// Player height in tiles
-    static let playerHeightTiles: Int = 2
+    /// Player height in tiles (doubled for same world size)
+    static let playerHeightTiles: Int = 4
 
-    /// Player width in tiles
-    static let playerWidthTiles: Int = 1
+    /// Player width in tiles (doubled for same world size)
+    static let playerWidthTiles: Int = 2
 
     /// Player height in world units
     static var playerHeight: Float { Float(playerHeightTiles) * tileSize }
