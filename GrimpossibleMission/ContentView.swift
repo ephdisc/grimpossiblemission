@@ -13,8 +13,8 @@ struct ContentView: View {
     // Game coordinator manages ECS lifecycle
     private let gameCoordinator: GameCoordinator
 
-    // Debug info for nearest searchable item
-    @State private var nearestItemInfo: String = ""
+    // Debug info for player velocity
+    @State private var velocityInfo: String = ""
     @State private var updateTimer: Timer?
 
     init() {
@@ -45,10 +45,10 @@ struct ContentView: View {
             }
             .ignoresSafeArea()
 
-            // Searchable item debug overlay
+            // Player velocity debug overlay
             VStack {
                 HStack {
-                    Text(nearestItemInfo)
+                    Text(velocityInfo)
                         .font(.system(size: 24, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                         .padding()
@@ -75,9 +75,9 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // Start timer to update nearest searchable item info
-            updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                nearestItemInfo = gameCoordinator.getNearestSearchableItemInfo()
+            // Start timer to update player velocity info
+            updateTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { _ in
+                velocityInfo = gameCoordinator.getPlayerVelocityInfo()
             }
         }
         // IMPORTANT: Prevents menu/home button from exiting the app

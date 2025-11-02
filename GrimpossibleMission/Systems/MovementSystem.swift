@@ -106,12 +106,15 @@ class PhysicsSystem: GameSystem {
                let jump = jumpComponent,
                gravity.isActive {
 
-                // Gravity only applies when NOT ascending (JumpSystem controls ascending velocity)
-                if jump.state != .ascending {
+                // Gravity only applies when NOT following an arc (JumpSystem controls arc velocity)
+                // Arc is active when ascending OR when falling with arcProgress < 1.0
+                let isFollowingArc = jump.state == .ascending || (jump.state == .falling && jump.arcProgress < 1.0)
+
+                if !isFollowingArc {
                     if jump.state == .grounded {
                         velocity.dy = 0  // No vertical velocity when grounded
                     } else {
-                        velocity.dy = -gravity.fallSpeed  // Consistent falling speed
+                        velocity.dy = -gravity.fallSpeed  // Consistent falling speed (only after arc completes)
                     }
                 }
             }
@@ -166,6 +169,16 @@ class PhysicsSystem: GameSystem {
                             print("[Physics] Hit \(obstacle) during arc - ascending -> falling")
                         }
                         jump.state = .falling
+
+                        // Initialize falling arc from current position
+                        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
+                        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
+                        jump.jumpTargetPosition = SIMD3<Float>(
+                            position.x,
+                            playerBottomY - GameConfig.roomHeight,
+                            position.z
+                        )
+                        jump.arcProgress = 0.5  // Start at peak for consistent descent
                     }
                     // No floor collision but was grounded → walked off edge
                     else if !result.hitFloor && jump.state == .grounded {
@@ -173,6 +186,16 @@ class PhysicsSystem: GameSystem {
                             print("[Physics] No floor contact - grounded -> falling")
                         }
                         jump.state = .falling
+
+                        // Initialize falling arc at peak (t=0.5) so descent matches jump arc
+                        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
+                        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
+                        jump.jumpTargetPosition = SIMD3<Float>(
+                            position.x,
+                            playerBottomY - GameConfig.roomHeight,
+                            position.z
+                        )
+                        jump.arcProgress = 0.5  // Start at peak of arc
                     }
 
                     jumpComponent = jump

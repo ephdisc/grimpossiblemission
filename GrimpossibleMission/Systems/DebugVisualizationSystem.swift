@@ -62,7 +62,7 @@ class DebugVisualizationSystem: GameSystem {
         let arcStartPos = SIMD3<Float>(position.x, playerBottomY, position.z)
         let targetPos = SIMD3<Float>(
             position.x + horizontalDistance,
-            playerBottomY,  // Land at same height
+            playerBottomY - GameConfig.roomHeight,  // Land 1 room height below
             position.z
         )
 
@@ -95,9 +95,12 @@ class DebugVisualizationSystem: GameSystem {
         for i in 0..<numPoints {
             let t = Float(i) / Float(numPoints - 1)
 
-            // Calculate position along arc using parabolic formula: h = 4 * arcHeight * t * (1 - t)
+            // Calculate position along arc using extended parabola that ends below start
+            // Arc goes from startY at t=0, peaks at startY + arcHeight at t=0.5, ends at targetY at t=1.0
+            // Formula: h(t) = (-4*arcHeight - 2*roomHeight)t² + (4*arcHeight + roomHeight)t
             let worldX = startPos.x + (targetPos.x - startPos.x) * t
-            let heightOffset = 4.0 * arcHeight * t * (1.0 - t)
+            let roomHeight = GameConfig.roomHeight
+            let heightOffset = (-4.0 * arcHeight - 2.0 * roomHeight) * t * t + (4.0 * arcHeight + roomHeight) * t
             let worldY = startPos.y + heightOffset
             let worldZ = startPos.z
 

@@ -43,6 +43,14 @@ class GameCoordinator {
     /// Last update time for delta time calculation
     private var lastUpdateTime: TimeInterval = 0
 
+    /// Velocity tracking for debug
+    private var minVelocityX: Float = 0
+    private var maxVelocityX: Float = 0
+    private var minVelocityY: Float = 0
+    private var maxVelocityY: Float = 0
+    private var lastJumpTime: TimeInterval = 0
+    private var wasJumping: Bool = false
+
     // MARK: - Initialization
 
     init(inputProvider: InputProvider, cameraController: OrthographicCameraController) {
@@ -160,10 +168,49 @@ class GameCoordinator {
         let deltaTime = currentTime - lastUpdateTime
         lastUpdateTime = currentTime
 
+        // Track velocity min/max and detect jumps
+        updateVelocityTracking(currentTime: currentTime)
+
         // Update all systems
         for system in systems {
             system.update(deltaTime: deltaTime, entities: entities)
         }
+    }
+
+    /// Track velocity min/max values and reset after 5s from last jump
+    private func updateVelocityTracking(currentTime: TimeInterval) {
+        guard let player = player,
+              let velocity = player.components[VelocityComponent.self],
+              let jump = player.components[JumpComponent.self] else {
+            return
+        }
+
+        // Detect jump start
+        let isJumping = jump.state == .ascending
+        if isJumping && !wasJumping {
+            // Jump just started - reset tracking
+            minVelocityX = velocity.dx
+            maxVelocityX = velocity.dx
+            minVelocityY = velocity.dy
+            maxVelocityY = velocity.dy
+            lastJumpTime = currentTime
+        }
+        wasJumping = isJumping
+
+        // Reset after 5 seconds from last jump
+        if currentTime - lastJumpTime > 5.0 {
+            minVelocityX = velocity.dx
+            maxVelocityX = velocity.dx
+            minVelocityY = velocity.dy
+            maxVelocityY = velocity.dy
+            lastJumpTime = currentTime
+        }
+
+        // Update min/max
+        minVelocityX = min(minVelocityX, velocity.dx)
+        maxVelocityX = max(maxVelocityX, velocity.dx)
+        minVelocityY = min(minVelocityY, velocity.dy)
+        maxVelocityY = max(maxVelocityY, velocity.dy)
     }
 
     // MARK: - Scene Management
@@ -252,5 +299,20 @@ class GameCoordinator {
         }
 
         return nearestInfo
+    }
+
+    /// Get player velocity debug information
+    func getPlayerVelocityInfo() -> String {
+        guard let player = player,
+              let velocity = player.components[VelocityComponent.self] else {
+            return "No Player"
+        }
+
+        return String(format: """
+            vX: %.1f (min: %.1f, max: %.1f)
+            vY: %.1f (min: %.1f, max: %.1f)
+            """,
+            velocity.dx, minVelocityX, maxVelocityX,
+            velocity.dy, minVelocityY, maxVelocityY)
     }
 }

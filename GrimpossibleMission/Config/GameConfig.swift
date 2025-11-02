@@ -47,7 +47,7 @@ struct GameConfig {
 
     /// Player movement speed in units per second (Mario-ish feel)
     /// Tuned so player can traverse 2 tiles in a reasonable time
-    static let playerMoveSpeed: Float = 6.0
+    static let playerMoveSpeed: Float = 8.0
 
     /// Jump height in tiles (player can jump 3 tiles high)
     static let jumpHeightTiles: Int = 3
@@ -67,7 +67,7 @@ struct GameConfig {
     static let jumpArcWidthTiles: Float = 6.0
 
     /// Jump arc height in tiles (vertical peak)
-    static let jumpArcHeightTiles: Float = 10.0
+    static let jumpArcHeightTiles: Float = 8.0
 
     /// Jump arc width in world units
     static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }
@@ -84,7 +84,13 @@ struct GameConfig {
     static let jumpDescentSpeed: Float = 8.0
 
     /// Fall speed when not jumping (walking off ledge)
-    static let fallSpeed: Float = 12.0
+    /// Calculated to match the AVERAGE vertical velocity during arc descent
+    /// During descent (t=0.5 to t=1.0), velocity goes from 0 to max, so average is max/2
+    /// Formula: 2 * arcHeight * averageSpeed / arcWidth
+    static var fallSpeed: Float {
+        let averageSpeed = (jumpAscentSpeed + jumpDescentSpeed) / 2.0
+        return 2.0 * jumpArcHeight * averageSpeed / jumpArcWidth
+    }
 
     /// Lateral movement speed while falling (reduced control)
     static let fallLateralSpeed: Float = 1.0

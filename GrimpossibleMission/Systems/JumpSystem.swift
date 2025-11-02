@@ -33,8 +33,8 @@ class JumpSystem: GameSystem {
             // Handle jump input
             handleJumpInput(&jumpComponent, inputState: inputState, position: position, facing: facing)
 
-            // Update jump arc if currently ascending
-            if jumpComponent.state == .ascending {
+            // Update jump arc if currently ascending or falling with an active arc
+            if jumpComponent.state == .ascending || jumpComponent.state == .falling {
                 updateJumpArc(&jumpComponent, velocity: &velocity, deltaTime: Float(deltaTime))
             }
 
@@ -85,15 +85,16 @@ class JumpSystem: GameSystem {
         jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
 
         // Calculate target landing position based on facing direction
+        // Arc ends 1 room height below the start position
         let horizontalDistance = facing.direction == .right ? jump.arcWidth : -jump.arcWidth
         jump.jumpTargetPosition = SIMD3<Float>(
             position.x + horizontalDistance,
-            playerBottomY,
+            playerBottomY - GameConfig.roomHeight,
             position.z
         )
 
         if GameConfig.debugLogging {
-            print("[Jump] Started jump - Arc: \(jump.arcWidth)w × \(jump.arcHeight)h")
+            print("[Jump] Started jump - Arc: \(jump.arcWidth)w × \(jump.arcHeight)h, ends \(GameConfig.roomHeight) below start")
         }
     }
 
@@ -132,10 +133,15 @@ class JumpSystem: GameSystem {
         let direction: Float = (targetPos.x - startPos.x) > 0 ? 1.0 : -1.0
         velocity.dx = direction * totalDistance / totalDuration
 
-        // Vertical velocity from derivative of parabola: dy/dt = 4 * h * (1 - 2t) / duration
-        // This is positive when t < 0.5 (ascending) and negative when t > 0.5 (descending)
+        // Vertical velocity from derivative of parabola
+        // Arc goes from startY at t=0, peaks at startY + arcHeight at t=0.5, ends at startY - roomHeight at t=1.0
+        // Parabola: h(t) = (-4*arcHeight - 2*roomHeight)t² + (4*arcHeight + roomHeight)t
+        // Derivative: dh/dt = (-8*arcHeight - 4*roomHeight)t + (4*arcHeight + roomHeight)
+        // Velocity: dh/dt / totalDuration
         let arcHeight = jump.arcHeight
-        velocity.dy = 4.0 * arcHeight * (1.0 - 2.0 * t) / totalDuration
+        let roomHeight = GameConfig.roomHeight
+        let heightDerivative = (-8.0 * arcHeight - 4.0 * roomHeight) * t + (4.0 * arcHeight + roomHeight)
+        velocity.dy = heightDerivative / totalDuration
     }
 
     // MARK: - Timer Management
