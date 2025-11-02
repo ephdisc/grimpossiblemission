@@ -313,6 +313,49 @@ class PhysicsSystem: GameSystem {
                         hitWall = true
                     }
                 }
+
+            case .block:
+                // Blocks all directions - check for collision from any side
+                // For floor detection, use expanded bounds like floor/platform
+                let isNearOrOnBlock = playerTop > solidBottom && playerBottom < solidTop + floorDetectionTolerance
+
+                if isHorizontallyAligned && isNearOrOnBlock {
+                    // Check if approaching from above (landing on top)
+                    let playerBottomEdge = currentPosition.y - playerHalfHeight
+                    let isFromAbove = playerBottomEdge >= solidTop - GameConfig.collisionTolerance
+
+                    if velocity.dy <= 0 && isFromAbove {
+                        finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance
+                        finalVelocity.dy = 0
+                        hitFloor = true
+                    }
+                }
+
+                // Standard AABB for other directions
+                if playerRight > solidLeft && playerLeft < solidRight &&
+                   playerTop > solidBottom && playerBottom < solidTop {
+
+                    // Hit from below (ceiling collision)
+                    if velocity.dy > 0 && currentPosition.y < solidPos.y {
+                        finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance
+                        finalVelocity.dy = 0
+                        hitCeiling = true
+                    }
+
+                    // Hit from side (wall collision)
+                    if velocity.dx != 0 {
+                        let playerCenterX = currentPosition.x
+                        if playerCenterX < solidPos.x {
+                            // Hit from left
+                            finalPosition.x = solidLeft - playerHalfWidth - GameConfig.collisionTolerance
+                        } else {
+                            // Hit from right
+                            finalPosition.x = solidRight + playerHalfWidth + GameConfig.collisionTolerance
+                        }
+                        finalVelocity.dx = 0
+                        hitWall = true
+                    }
+                }
             }
         }
 

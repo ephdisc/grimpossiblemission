@@ -49,25 +49,13 @@ struct GameConfig {
     /// Tuned so player can traverse 2 tiles in a reasonable time
     static let playerMoveSpeed: Float = 8.0
 
-    /// Jump height in tiles (player can jump 3 tiles high)
-    static let jumpHeightTiles: Int = 3
-
-    /// Jump distance in tiles (player can jump 2 tiles forward)
-    static let jumpDistanceTiles: Int = 2
-
-    /// Jump height in world units
-    static var jumpHeight: Float { Float(jumpHeightTiles) * tileSize }
-
-    /// Jump distance in world units
-    static var jumpDistance: Float { Float(jumpDistanceTiles) * tileSize }
-
     // MARK: - Physics Configuration
 
     /// Jump arc width in tiles (horizontal distance)
-    static let jumpArcWidthTiles: Float = 6.0
+    static let jumpArcWidthTiles: Float = 100.0
 
-    /// Jump arc height in tiles (vertical peak)
-    static let jumpArcHeightTiles: Float = 8.0
+    /// Jump arc height in tiles (vertical peak above start position)
+    static let jumpArcHeightTiles: Float = 2.0
 
     /// Jump arc width in world units
     static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }

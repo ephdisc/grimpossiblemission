@@ -13,6 +13,7 @@ enum SolidType {
     case wall       // Blocks horizontal movement
     case ceiling    // Blocks upward movement
     case platform   // Future: one-way platform (can pass through from below)
+    case block      // Blocks all directions (solid obstacle)
 }
 
 /// Component that marks entities as solid/collidable.

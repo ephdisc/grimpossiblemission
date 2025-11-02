@@ -30,7 +30,7 @@ struct JumpComponent: Component {
     var state: JumpState = .grounded
 
     /// Jump arc dimensions (configured from GameConfig)
-    var arcWidth: Float = 2.0
+    var arcWidth: Float = 6.0
     var arcHeight: Float = 3.0
 
     /// Progress through jump arc (0.0 = start, 0.5 = peak, 1.0 = landing)

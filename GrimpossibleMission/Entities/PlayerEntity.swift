@@ -55,6 +55,11 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     jumpComponent.arcHeight = GameConfig.jumpArcHeight
     jumpComponent.state = .falling  // Start falling until collision detection sets to grounded
 
+    if GameConfig.debugLogging {
+        print("[PlayerEntity] Created player with jump arc: \(jumpComponent.arcWidth)w × \(jumpComponent.arcHeight)h")
+        print("[PlayerEntity] GameConfig values: \(GameConfig.jumpArcWidthTiles) tiles × \(GameConfig.jumpArcHeightTiles) tiles")
+    }
+
     // Gravity component (player is affected by gravity)
     var gravityComponent = GravityComponent()
     gravityComponent.fallSpeed = GameConfig.fallSpeed
