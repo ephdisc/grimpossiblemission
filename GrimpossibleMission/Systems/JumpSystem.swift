@@ -4,10 +4,15 @@
 //
 //  ECS System that handles committed jump arcs.
 //
+//  RESPONSIBILITY:
+//  - Detects jump input and initiates jumps
+//  - Controls velocity during FULL parabolic arc (t=0 to t=1.0)
+//  - Transitions to falling when arc completes OR interrupted by collision
+//  - Manages jump buffering and coyote time
+//
 
 import Foundation
 import RealityKit
-import UIKit
 
 /// System that manages jumping with committed arcs
 class JumpSystem: GameSystem {
@@ -22,197 +27,136 @@ class JumpSystem: GameSystem {
                 continue
             }
 
-            // Update timers
-            updateTimers(&jumpComponent, deltaTime: Float(deltaTime), inputState: inputState)
-
-            // Update debug arc visualization when grounded (shows where player would jump)
-            if jumpComponent.state == .grounded && GameConfig.debugVisualization {
-                // Calculate where player would land if they jumped right now
-                let horizontalDistance = facing.direction == .right ? jumpComponent.arcWidth : -jumpComponent.arcWidth
-
-                // Arc should start from player's bottom/center (feet position)
-                let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
-                let arcStartPos = SIMD3<Float>(position.x, playerBottomY, position.z)
-                let targetPos = SIMD3<Float>(
-                    position.x + horizontalDistance,
-                    playerBottomY,  // Land at same height
-                    position.z
-                )
-
-                createDebugArc(
-                    on: entity,
-                    startPos: arcStartPos,
-                    targetPos: targetPos,
-                    arcHeight: jumpComponent.arcHeight
-                )
-            }
+            // Update jump timers (buffer and coyote time)
+            updateTimers(&jumpComponent, deltaTime: Float(deltaTime))
 
             // Handle jump input
-            if inputState.jump && !jumpComponent.jumpInputPressed {
-                // Jump button pressed this frame
-                jumpComponent.jumpInputPressed = true
+            handleJumpInput(&jumpComponent, inputState: inputState, position: position, facing: facing)
 
-                // Try to start jump if grounded or within coyote time
-                if jumpComponent.canJump {
-                    startJump(&jumpComponent, entity: entity, position: position, facing: facing)
-                } else {
-                    // Buffer the jump input
-                    jumpComponent.jumpBufferTimer = GameConfig.jumpBufferTime
-                }
-            } else if !inputState.jump {
-                // Jump button released
-                jumpComponent.jumpInputPressed = false
-            }
-
-            // Check jump buffer when landing
-            if jumpComponent.state == .grounded && jumpComponent.jumpBufferTimer > 0 {
-                startJump(&jumpComponent, entity: entity, position: position, facing: facing)
-            }
-
-            // Update jump arc if currently jumping
-            if jumpComponent.state == .jumping {
+            // Update jump arc if currently ascending
+            if jumpComponent.state == .ascending {
                 updateJumpArc(&jumpComponent, velocity: &velocity, deltaTime: Float(deltaTime))
             }
 
-            // Update component
+            // Update components
             entity.components.set(jumpComponent)
             entity.components.set(velocity)
         }
     }
 
-    /// Updates jump timers (buffer and coyote time)
-    private func updateTimers(_ jump: inout JumpComponent, deltaTime: Float, inputState: InputStateComponent) {
+    // MARK: - Jump Input Handling
+
+    /// Handles jump button press and initiates jumps
+    private func handleJumpInput(
+        _ jump: inout JumpComponent,
+        inputState: InputStateComponent,
+        position: PositionComponent,
+        facing: FacingDirectionComponent
+    ) {
+        // Detect jump button press (rising edge)
+        if inputState.jump && !jump.jumpInputPressed {
+            jump.jumpInputPressed = true
+
+            // Try to start jump if grounded or within coyote time
+            if jump.canJump {
+                startJump(&jump, position: position, facing: facing)
+            } else {
+                // Buffer the jump input for when we land
+                jump.jumpBufferTimer = GameConfig.jumpBufferTime
+            }
+        } else if !inputState.jump {
+            jump.jumpInputPressed = false
+        }
+
+        // Check jump buffer when landing
+        if jump.state == .grounded && jump.jumpBufferTimer > 0 {
+            startJump(&jump, position: position, facing: facing)
+        }
+    }
+
+    /// Initiates a jump with committed arc
+    private func startJump(_ jump: inout JumpComponent, position: PositionComponent, facing: FacingDirectionComponent) {
+        jump.state = .ascending
+        jump.arcProgress = 0.0
+        jump.jumpBufferTimer = 0.0
+
+        // Arc starts from player's feet (bottom center)
+        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
+        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
+
+        // Calculate target landing position based on facing direction
+        let horizontalDistance = facing.direction == .right ? jump.arcWidth : -jump.arcWidth
+        jump.jumpTargetPosition = SIMD3<Float>(
+            position.x + horizontalDistance,
+            playerBottomY,
+            position.z
+        )
+
+        if GameConfig.debugLogging {
+            print("[Jump] Started jump - Arc: \(jump.arcWidth)w × \(jump.arcHeight)h")
+        }
+    }
+
+    // MARK: - Jump Arc Physics
+
+    /// Updates velocity based on jump arc progress (full parabolic arc)
+    private func updateJumpArc(_ jump: inout JumpComponent, velocity: inout VelocityComponent, deltaTime: Float) {
+        // Calculate total arc duration
+        let totalDistance = jump.arcWidth
+        let averageSpeed = (GameConfig.jumpAscentSpeed + GameConfig.jumpDescentSpeed) / 2.0
+        let totalDuration = totalDistance / averageSpeed
+
+        // Update arc progress
+        jump.arcProgress += deltaTime / totalDuration
+        jump.arcProgress = min(jump.arcProgress, 1.0)
+
+        let t = jump.arcProgress
+        let startPos = jump.jumpStartPosition
+        let targetPos = jump.jumpTargetPosition
+
+        // Check if we've completed the full arc (t >= 1.0)
+        if t >= 1.0 {
+            // Arc completed - transition to falling (gravity takes over)
+            jump.state = .falling
+            velocity.dx = 0  // Stop horizontal movement
+            velocity.dy = 0  // Gravity will apply next frame
+
+            if GameConfig.debugLogging {
+                print("[Jump] Arc completed, transitioning to falling")
+            }
+            return
+        }
+
+        // Continue following the parabolic arc
+        // Horizontal velocity (constant direction throughout arc)
+        let direction: Float = (targetPos.x - startPos.x) > 0 ? 1.0 : -1.0
+        velocity.dx = direction * totalDistance / totalDuration
+
+        // Vertical velocity from derivative of parabola: dy/dt = 4 * h * (1 - 2t) / duration
+        // This is positive when t < 0.5 (ascending) and negative when t > 0.5 (descending)
+        let arcHeight = jump.arcHeight
+        velocity.dy = 4.0 * arcHeight * (1.0 - 2.0 * t) / totalDuration
+    }
+
+    // MARK: - Timer Management
+
+    /// Updates jump buffer and coyote timers
+    private func updateTimers(_ jump: inout JumpComponent, deltaTime: Float) {
         // Update jump buffer timer
         if jump.jumpBufferTimer > 0 {
             jump.jumpBufferTimer -= deltaTime
-            if jump.jumpBufferTimer < 0 {
-                jump.jumpBufferTimer = 0
-            }
+            jump.jumpBufferTimer = max(jump.jumpBufferTimer, 0)
         }
 
         // Update coyote timer (only when falling)
         if jump.state == .falling {
             if jump.coyoteTimer > 0 {
                 jump.coyoteTimer -= deltaTime
-                if jump.coyoteTimer < 0 {
-                    jump.coyoteTimer = 0
-                }
+                jump.coyoteTimer = max(jump.coyoteTimer, 0)
             }
         } else if jump.state == .grounded {
             // Reset coyote timer when grounded
             jump.coyoteTimer = GameConfig.coyoteTime
-        }
-    }
-
-    /// Starts a jump with committed arc
-    private func startJump(_ jump: inout JumpComponent, entity: Entity, position: PositionComponent, facing: FacingDirectionComponent) {
-        jump.state = .jumping
-        jump.arcProgress = 0.0
-
-        // Arc should start from player's bottom/center (feet position)
-        let playerBottomY = position.y - (GameConfig.playerHeight / 2.0)
-        jump.jumpStartPosition = SIMD3<Float>(position.x, playerBottomY, position.z)
-        jump.jumpBufferTimer = 0.0
-
-        // Calculate target landing position based on facing direction
-        let horizontalDistance = facing.direction == .right ? jump.arcWidth : -jump.arcWidth
-        jump.jumpTargetPosition = SIMD3<Float>(
-            position.x + horizontalDistance,
-            playerBottomY,  // Land at same height (feet level)
-            position.z
-        )
-
-        if GameConfig.debugLogging {
-            print("[Jump] Started jump from (\(position.x), \(playerBottomY)) to (\(jump.jumpTargetPosition.x), \(jump.jumpTargetPosition.y))")
-            print("[Jump] Arc dimensions - Width: \(jump.arcWidth), Height: \(jump.arcHeight)")
-        }
-    }
-
-    /// Updates velocity based on jump arc progress
-    private func updateJumpArc(_ jump: inout JumpComponent, velocity: inout VelocityComponent, deltaTime: Float) {
-        // Calculate how much progress to make this frame
-        let totalDistance = jump.arcWidth
-        let totalDuration = totalDistance / (GameConfig.jumpAscentSpeed * 0.5 + GameConfig.jumpDescentSpeed * 0.5)
-
-        // Update arc progress
-        jump.arcProgress += deltaTime / totalDuration
-        jump.arcProgress = min(jump.arcProgress, 1.0)
-
-        // Calculate position along arc
-        let t = jump.arcProgress
-        let startPos = jump.jumpStartPosition
-        let targetPos = jump.jumpTargetPosition
-
-        // Calculate velocity from arc trajectory
-        // Horizontal velocity is constant (direction of jump)
-        let direction: Float = (targetPos.x - startPos.x) > 0 ? 1.0 : -1.0
-        velocity.dx = direction * totalDistance / totalDuration
-
-        // Vertical velocity from derivative of parabola: dy/dt = 4 * h * (1 - 2t) / duration
-        let arcHeight = jump.arcHeight
-        velocity.dy = 4.0 * arcHeight * (1.0 - 2.0 * t) / totalDuration
-
-        // Check if jump is complete
-        if jump.arcProgress >= 1.0 {
-            jump.state = .falling
-            velocity.dx = 0  // Stop horizontal movement when arc completes
-
-            if GameConfig.debugLogging {
-                print("[Jump] Jump arc completed")
-            }
-        }
-    }
-
-    /// Creates a visual representation of the jump arc in world space
-    private func createDebugArc(on entity: Entity, startPos: SIMD3<Float>, targetPos: SIMD3<Float>, arcHeight: Float) {
-        // Remove any existing debug arc
-        removeDebugArc(from: entity)
-
-        // Find the scene root (player's parent, which is the scene/world)
-        guard let sceneRoot = entity.parent else {
-            return
-        }
-
-        // Create container for arc visualization
-        let arcContainer = Entity()
-        arcContainer.name = "DebugJumpArc"
-
-        // Number of points along the arc
-        let numPoints = 20
-
-        // Create small spheres along the arc path in world space
-        for i in 0..<numPoints {
-            let t = Float(i) / Float(numPoints - 1)
-
-            // Calculate position along arc in world space using same formula as jump
-            let worldX = startPos.x + (targetPos.x - startPos.x) * t
-            let heightOffset = 4.0 * arcHeight * t * (1.0 - t)
-            let worldY = startPos.y + heightOffset
-            let worldZ = startPos.z
-
-            // Create small sphere at this point (world coordinates)
-            let point = Entity()
-            let mesh = MeshResource.generateSphere(radius: 0.1)
-            let material = SimpleMaterial(color: .yellow, isMetallic: false)
-            point.components.set(ModelComponent(mesh: mesh, materials: [material]))
-            point.position = SIMD3<Float>(worldX, worldY, worldZ)
-
-            arcContainer.addChild(point)
-        }
-
-        // Add arc to scene root (not as child of player) so it stays in world space
-        sceneRoot.addChild(arcContainer)
-    }
-
-    /// Removes the debug arc visualization
-    private func removeDebugArc(from entity: Entity) {
-        // Look for arc in scene root (parent of player)
-        guard let sceneRoot = entity.parent else {
-            return
-        }
-
-        if let arcContainer = sceneRoot.children.first(where: { $0.name == "DebugJumpArc" }) {
-            arcContainer.removeFromParent()
         }
     }
 }

@@ -78,7 +78,11 @@ class GameCoordinator {
         let searchSystem = SearchSystem()
         systems.append(searchSystem)
 
-        // 6. Camera system (updates camera based on player position)
+        // 6. Debug visualization system (renders debug overlays like jump arcs)
+        let debugSystem = DebugVisualizationSystem()
+        systems.append(debugSystem)
+
+        // 7. Camera system (updates camera based on player position)
         let cameraSystem = CameraManagementSystem(cameraController: cameraController)
         self.cameraManagementSystem = cameraSystem
         systems.append(cameraSystem)

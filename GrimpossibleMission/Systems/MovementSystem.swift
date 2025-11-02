@@ -9,51 +9,52 @@ import Foundation
 import RealityKit
 
 /// System that processes input and updates entity velocity and facing direction.
-/// Implements arcade-style movement with immediate response and no physics.
+///
+/// RESPONSIBILITY:
+/// - Converts player input to horizontal velocity
+/// - Updates facing direction based on input
+/// - Applies different movement speeds based on jump state:
+///   * grounded: full speed control
+///   * ascending: NO control (JumpSystem manages velocity)
+///   * falling: limited lateral control
 class MovementSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
         for entity in entities {
-            // Only process entities that have the required components
             guard let inputState = entity.components[InputStateComponent.self],
                   var velocity = entity.components[VelocityComponent.self],
                   var facing = entity.components[FacingDirectionComponent.self],
+                  let jumpComponent = entity.components[JumpComponent.self],
                   entity.components[PlayerComponent.self] != nil else {
                 continue
             }
 
-            // Check if jumping - if so, JumpSystem controls velocity
-            let jumpComponent = entity.components[JumpComponent.self]
-            if let jump = jumpComponent, jump.state == .jumping {
-                // Don't override jump velocity
+            // JumpSystem controls velocity during ascending phase
+            if jumpComponent.state == .ascending {
                 continue
             }
 
             // Get horizontal input
             let horizontalInput = inputState.horizontalAxis
 
-            // Determine movement speed based on jump state
-            let moveSpeed: Float
-            if let jump = jumpComponent, jump.state == .falling {
-                // Reduced lateral control when falling
-                moveSpeed = GameConfig.fallLateralSpeed
-            } else {
-                // Full control when grounded
-                moveSpeed = GameConfig.playerMoveSpeed
+            // Determine movement speed based on state
+            let moveSpeed: Float = switch jumpComponent.state {
+            case .grounded:
+                GameConfig.playerMoveSpeed  // Full control
+            case .falling:
+                GameConfig.fallLateralSpeed  // Reduced control
+            case .ascending:
+                0.0  // No control (shouldn't reach here due to continue above)
             }
 
             // Update velocity based on input (arcade-style: immediate response)
-            // Only when grounded or falling (not jumping)
             if horizontalInput < 0 {
-                // Moving left
                 velocity.dx = -moveSpeed
                 facing.direction = .left
             } else if horizontalInput > 0 {
-                // Moving right
                 velocity.dx = moveSpeed
                 facing.direction = .right
             } else {
-                // Not moving horizontally
                 velocity.dx = 0
             }
 
@@ -65,10 +66,21 @@ class MovementSystem: GameSystem {
 }
 
 /// System that applies physics: gravity, velocity to position, and collision detection.
+///
+/// RESPONSIBILITY:
+/// - Applies consistent gravity when NOT ascending
+/// - Detects and resolves all collisions via AABB
+/// - Updates jump states based on COLLISION RESULTS (collision is source of truth)
+/// - Applies velocity to position
+///
+/// COLLISION-BASED STATE TRANSITIONS:
+/// - hitFloor detected → grounded (if not ascending or past arc peak)
+/// - hitCeiling/hitWall during ascending → falling
+/// - No hitFloor when grounded → falling (walked off edge)
 class PhysicsSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
-        // Collect solid entities for collision detection (search recursively through children)
+        // Collect solid entities for collision detection (search recursively)
         let solidEntities = collectSolidEntities(from: entities)
 
         for entity in entities {
@@ -77,56 +89,34 @@ class PhysicsSystem: GameSystem {
                 continue
             }
 
-            // Get jump component if entity has one (for gravity and collision)
             var jumpComponent = entity.components[JumpComponent.self]
 
-            // Check if standing on ground or touching walls BEFORE applying movement
-            var isCurrentlyGrounded = false
+            // STEP 1: Check wall proximity (for pre-collision horizontal cancellation)
             var isTouchingLeftWall = false
             var isTouchingRightWall = false
 
             if entity.components[PlayerComponent.self] != nil {
-                isCurrentlyGrounded = checkGrounded(
-                    position: position,
-                    solids: solidEntities
-                )
-
-                let wallCheck = checkWalls(
-                    position: position,
-                    solids: solidEntities
-                )
+                let wallCheck = checkWalls(position: position, solids: solidEntities)
                 isTouchingLeftWall = wallCheck.left
                 isTouchingRightWall = wallCheck.right
             }
 
-            // Apply gravity if entity has GravityComponent
+            // STEP 2: Apply gravity (state-based, not proximity-based)
             if let gravity = entity.components[GravityComponent.self],
                let jump = jumpComponent,
                gravity.isActive {
 
-                // Don't apply gravity when jumping - JumpSystem controls velocity
-                if jump.state != .jumping {
-                    // Only apply gravity when not grounded
-                    if !isCurrentlyGrounded {
-                        velocity.dy = -gravity.fallSpeed
+                // Gravity only applies when NOT ascending (JumpSystem controls ascending velocity)
+                if jump.state != .ascending {
+                    if jump.state == .grounded {
+                        velocity.dy = 0  // No vertical velocity when grounded
                     } else {
-                        // No vertical velocity when grounded
-                        velocity.dy = 0
+                        velocity.dy = -gravity.fallSpeed  // Consistent falling speed
                     }
-                }
-
-                // Update jump state based on grounded check
-                if var jump = jumpComponent {
-                    if isCurrentlyGrounded && jump.state != .jumping {
-                        jump.state = .grounded
-                    } else if !isCurrentlyGrounded && jump.state == .grounded {
-                        jump.state = .falling
-                    }
-                    jumpComponent = jump
                 }
             }
 
-            // Cancel horizontal movement if touching wall in that direction
+            // STEP 3: Cancel horizontal movement if touching wall
             if isTouchingLeftWall && velocity.dx < 0 {
                 velocity.dx = 0
             }
@@ -134,11 +124,11 @@ class PhysicsSystem: GameSystem {
                 velocity.dx = 0
             }
 
-            // Calculate new position
+            // STEP 4: Calculate new position from velocity
             let newX = position.x + velocity.dx * Float(deltaTime)
             let newY = position.y + velocity.dy * Float(deltaTime)
 
-            // Apply collision detection and response if entity has collision
+            // STEP 5: Apply collision detection and response
             if entity.components[PlayerComponent.self] != nil {
                 let result = resolveCollisions(
                     entity: entity,
@@ -151,17 +141,41 @@ class PhysicsSystem: GameSystem {
                 position = result.position
                 velocity = result.velocity
 
-                // Cancel jump if we hit a ceiling or wall during jump
+                // STEP 6: Update jump state based on collision results (collision is source of truth)
                 if var jump = jumpComponent {
-                    if jump.state == .jumping && (result.hitCeiling || result.hitWall) {
-                        jump.state = .falling
-                        jumpComponent = jump
-
-                        if GameConfig.debugLogging {
-                            let obstacleType = result.hitCeiling ? "ceiling" : "wall"
-                            print("[Physics] Jump cancelled due to \(obstacleType) collision")
+                    // Hit floor/platform from above → grounded
+                    if result.hitFloor {
+                        // Only allow landing during arc if descending (prevents immediate re-ground at jump start)
+                        if jump.state == .ascending && jump.arcProgress >= 0.5 {
+                            if GameConfig.debugLogging {
+                                print("[Physics] Landed on platform during arc - ascending -> grounded")
+                            }
+                            jump.state = .grounded
+                            velocity.dx = 0  // Stop arc horizontal velocity
+                        } else if jump.state == .falling {
+                            if GameConfig.debugLogging {
+                                print("[Physics] Landed on floor - falling -> grounded")
+                            }
+                            jump.state = .grounded
                         }
                     }
+                    // Hit ceiling or wall during arc → falling
+                    else if jump.state == .ascending && (result.hitCeiling || result.hitWall) {
+                        if GameConfig.debugLogging {
+                            let obstacle = result.hitCeiling ? "ceiling" : "wall"
+                            print("[Physics] Hit \(obstacle) during arc - ascending -> falling")
+                        }
+                        jump.state = .falling
+                    }
+                    // No floor collision but was grounded → walked off edge
+                    else if !result.hitFloor && jump.state == .grounded {
+                        if GameConfig.debugLogging {
+                            print("[Physics] No floor contact - grounded -> falling")
+                        }
+                        jump.state = .falling
+                    }
+
+                    jumpComponent = jump
                 }
             } else {
                 // No collision, just apply velocity
@@ -188,12 +202,13 @@ class PhysicsSystem: GameSystem {
         newPosition: SIMD3<Float>,
         velocity: VelocityComponent,
         solids: [Entity]
-    ) -> (position: PositionComponent, velocity: VelocityComponent, hitCeiling: Bool, hitWall: Bool) {
+    ) -> (position: PositionComponent, velocity: VelocityComponent, hitCeiling: Bool, hitWall: Bool, hitFloor: Bool) {
 
         var finalPosition = newPosition
         var finalVelocity = velocity
         var hitCeiling = false
         var hitWall = false
+        var hitFloor = false
 
         // Get player bounds (assuming 1x2x1 for now)
         let playerHalfWidth: Float = GameConfig.playerWidth / 2.0
@@ -220,28 +235,46 @@ class PhysicsSystem: GameSystem {
             let solidBottom = solidPos.y - solidBounds.y / 2.0
             let solidTop = solidPos.y + solidBounds.y / 2.0
 
-            // Check for AABB overlap
-            if playerRight > solidLeft && playerLeft < solidRight &&
-               playerTop > solidBottom && playerBottom < solidTop {
+            // For floor/platform detection, expand vertical bounds to catch resting state
+            // When player is resting on floor, they're positioned ABOVE solidTop by collisionTolerance
+            // So we need to detect "near the floor from above" as well as actual overlap
+            let floorDetectionTolerance: Float = GameConfig.collisionTolerance * 2.0
+            let isHorizontallyAligned = playerRight > solidLeft && playerLeft < solidRight
 
-                // Collision detected - resolve based on solid type
-                switch solidComponent.type {
-                case .floor, .platform:
-                    // Hit floor from above
-                    if velocity.dy < 0 {  // Moving down
+            // Handle each solid type with appropriate collision checks
+            switch solidComponent.type {
+            case .floor, .platform:
+                // Check if player is above the floor/platform (expanded check for resting state)
+                let isNearOrOnFloor = playerTop > solidBottom && playerBottom < solidTop + floorDetectionTolerance
+
+                if isHorizontallyAligned && isNearOrOnFloor {
+                    // Check if player is approaching from above (or resting from above)
+                    let playerBottomEdge = currentPosition.y - playerHalfHeight
+                    let isFromAbove = playerBottomEdge >= solidTop - GameConfig.collisionTolerance
+
+                    // Hit floor/platform from above OR resting on it
+                    if velocity.dy <= 0 && isFromAbove {
                         finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance
                         finalVelocity.dy = 0
+                        hitFloor = true  // Mark that we hit floor (this means grounded)
                     }
+                }
 
-                case .ceiling:
+            case .ceiling:
+                // Standard AABB overlap check for ceiling
+                if isHorizontallyAligned && playerTop > solidBottom && playerBottom < solidTop {
                     // Hit ceiling from below
                     if velocity.dy > 0 {  // Moving up
                         finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance
                         finalVelocity.dy = 0
                         hitCeiling = true
                     }
+                }
 
-                case .wall:
+            case .wall:
+                // Standard AABB overlap check for walls
+                if playerRight > solidLeft && playerLeft < solidRight &&
+                   playerTop > solidBottom && playerBottom < solidTop {
                     // Hit wall from side
                     if velocity.dx != 0 {
                         // Determine which side we hit
@@ -264,49 +297,11 @@ class PhysicsSystem: GameSystem {
             position: PositionComponent(x: finalPosition.x, y: finalPosition.y, z: finalPosition.z),
             velocity: finalVelocity,
             hitCeiling: hitCeiling,
-            hitWall: hitWall
+            hitWall: hitWall,
+            hitFloor: hitFloor
         )
     }
 
-    /// Checks if player is currently standing on ground
-    private func checkGrounded(position: PositionComponent, solids: [Entity]) -> Bool {
-        let playerHalfWidth: Float = GameConfig.playerWidth / 2.0
-        let playerHalfHeight: Float = GameConfig.playerHeight / 2.0
-
-        // Check slightly below the player's feet
-        let checkDistance: Float = 0.1
-        let feetY = position.y - playerHalfHeight
-
-        // Check for floor beneath player
-        for solid in solids {
-            guard let solidComponent = solid.components[SolidComponent.self],
-                  solidComponent.isActive,
-                  solidComponent.type == .floor || solidComponent.type == .platform else {
-                continue
-            }
-
-            let solidPos = solid.position
-            let solidBounds = solidComponent.bounds
-
-            let solidLeft = solidPos.x - solidBounds.x / 2.0
-            let solidRight = solidPos.x + solidBounds.x / 2.0
-            let solidTop = solidPos.y + solidBounds.y / 2.0
-
-            // Check if player is horizontally aligned with floor
-            let playerLeft = position.x - playerHalfWidth
-            let playerRight = position.x + playerHalfWidth
-
-            if playerRight > solidLeft && playerLeft < solidRight {
-                // Check if player's feet are just above the floor
-                let distanceToFloor = feetY - solidTop
-                if distanceToFloor >= 0 && distanceToFloor <= checkDistance {
-                    return true
-                }
-            }
-        }
-
-        return false
-    }
 
     /// Checks if player is currently touching walls
     private func checkWalls(position: PositionComponent, solids: [Entity]) -> (left: Bool, right: Bool) {

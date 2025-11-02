@@ -64,10 +64,10 @@ struct GameConfig {
     // MARK: - Physics Configuration
 
     /// Jump arc width in tiles (horizontal distance)
-    static let jumpArcWidthTiles: Float = 4.0
+    static let jumpArcWidthTiles: Float = 6.0
 
     /// Jump arc height in tiles (vertical peak)
-    static let jumpArcHeightTiles: Float = 6.0
+    static let jumpArcHeightTiles: Float = 10.0
 
     /// Jump arc width in world units
     static var jumpArcWidth: Float { jumpArcWidthTiles * tileSize }
@@ -138,6 +138,9 @@ struct GameConfig {
 
     /// Enable debug visualization (boundaries, collision boxes, etc.)
     static let debugVisualization: Bool = true
+
+    /// Enable jump arc visualization (yellow spheres showing jump trajectory)
+    static let debugJumpArc: Bool = true
 
     /// Enable debug logging
     static let debugLogging: Bool = true
