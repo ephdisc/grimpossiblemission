@@ -70,9 +70,9 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     // Player center is at position.y, so offset -0.25 to place hitbox at bottom 3 tiles
     let hitboxComponent = HitboxComponent(
         width: GameConfig.playerWidth,
-        height: GameConfig.tileSize * 3.0,  // 3 tiles = 1.5 units
+        height: GameConfig.tileSize * 2.0,  // 3 tiles = 1.5 units
         offsetX: 0,
-        offsetY: -0.25  // Offset to position at bottom 3 tiles
+        offsetY: -0.50  // Offset to position at bottom 3 tiles
     )
 
     // Set all components

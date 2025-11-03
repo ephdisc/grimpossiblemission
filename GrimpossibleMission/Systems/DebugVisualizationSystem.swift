@@ -14,13 +14,24 @@ import UIKit
 class DebugVisualizationSystem: GameSystem {
 
     func update(deltaTime: TimeInterval, entities: [Entity]) {
-        // Debug visualization disabled for impulse-based jumping
-        // TODO: Implement predicted trajectory visualization based on physics simulation
-        // (would show parabolic arc from initial jump velocity + gravity)
+        // Check if debug visualization is enabled
+        if !GameConfig.debugVisualization {
+            // Clean up any existing debug visuals
+            for entity in entities {
+                removeJumpArc(from: entity)
+                removeHitboxVisualization(from: entity)
+            }
+            return
+        }
 
-        // Clean up any existing arcs
+        // Update hitbox visualizations for all entities with hitboxes
         for entity in entities {
-            removeJumpArc(from: entity)
+            if let hitbox = entity.components[HitboxComponent.self],
+               let position = entity.components[PositionComponent.self] {
+                updateHitboxVisualization(on: entity, hitbox: hitbox, position: position)
+            } else {
+                removeHitboxVisualization(from: entity)
+            }
         }
     }
 
@@ -105,6 +116,41 @@ class DebugVisualizationSystem: GameSystem {
 
         if let arcContainer = sceneRoot.children.first(where: { $0.name == "DebugJumpArc" }) {
             arcContainer.removeFromParent()
+        }
+    }
+
+    /// Updates or creates the hitbox visualization for an entity
+    private func updateHitboxVisualization(on entity: Entity, hitbox: HitboxComponent, position: PositionComponent) {
+        // Check if debug visual already exists
+        let debugName = "DebugHitbox"
+        var debugBox = entity.children.first(where: { $0.name == debugName })
+
+        if debugBox == nil {
+            // Create new debug box
+            debugBox = Entity()
+            debugBox?.name = debugName
+
+            // Create a wireframe-style box
+            let boxSize = SIMD3<Float>(hitbox.width, hitbox.height, hitbox.width)
+            let mesh = MeshResource.generateBox(size: boxSize)
+
+            // Semi-transparent green material
+            var material = SimpleMaterial(color: .green, isMetallic: false)
+            material.color = SimpleMaterial.BaseColor(tint: UIColor.green.withAlphaComponent(0.3))
+
+            debugBox?.components.set(ModelComponent(mesh: mesh, materials: [material]))
+
+            entity.addChild(debugBox!)
+        }
+
+        // Update position (hitbox may have offset)
+        debugBox?.position = SIMD3<Float>(hitbox.offsetX, hitbox.offsetY, 0)
+    }
+
+    /// Removes the hitbox visualization from an entity
+    private func removeHitboxVisualization(from entity: Entity) {
+        if let debugBox = entity.children.first(where: { $0.name == "DebugHitbox" }) {
+            debugBox.removeFromParent()
         }
     }
 }
