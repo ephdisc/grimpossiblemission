@@ -17,7 +17,11 @@ struct InputStateComponent: Component {
 
     // Action inputs
     var jump: Bool = false
-    var interact: Bool = false    // Reserved for future use
+    var interact: Bool = false    // X button - used for room restart when held
+
+    // Restart tracking (X button hold)
+    var restartHoldTime: Float = 0.0
+    var restartTriggered: Bool = false
 
     /// Horizontal movement direction (-1 = left, 0 = none, 1 = right)
     var horizontalAxis: Float {

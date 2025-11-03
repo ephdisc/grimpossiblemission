@@ -52,7 +52,7 @@ struct GameConfig {
     // MARK: - Jump & Physics Configuration
 
     /// Jump velocity (upward impulse when jump is pressed)
-    static let jumpVelocity: Float = 13.0
+    static let jumpVelocity: Float = 14.0
 
     /// Gravity acceleration (constant downward pull when airborne)
     static let gravity: Float = 28.0
@@ -102,7 +102,7 @@ struct GameConfig {
     static let startingRoomIndex: Int = 0
 
     /// Player starting position in room (in tiles from room origin)
-    static let playerStartX: Float = 5.0
+    static let playerStartX: Float = 67.0  // Room 1 (rightmost room)
     static let playerStartY: Float = 10.0  // Mid-air to test gravity and collision
 
     // MARK: - Debug Configuration

@@ -34,8 +34,17 @@ class GameCoordinator {
     /// Camera management system
     private var cameraManagementSystem: CameraManagementSystem?
 
+    /// Room restart system
+    private var roomRestartSystem: RoomRestartSystem?
+
     /// Reference to player entity
     private(set) var player: Entity?
+
+    /// Player entrance position for current room (captured when entering)
+    private var roomEntrancePosition: SIMD3<Float> = SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
+
+    /// Current room index
+    private var currentRoomIndex: Int = 0
 
     /// Timer for update loop
     private var updateTimer: Timer?
@@ -86,12 +95,23 @@ class GameCoordinator {
         let searchSystem = SearchSystem()
         systems.append(searchSystem)
 
-        // 6. Debug visualization system (renders debug overlays like jump arcs)
+        // 6. Room restart system (monitors X button hold for restart)
+        let restartSystem = RoomRestartSystem()
+        restartSystem.onRestartRequested = { [weak self] in
+            self?.restartRoom()
+        }
+        self.roomRestartSystem = restartSystem
+        systems.append(restartSystem)
+
+        // 7. Debug visualization system (renders debug overlays like jump arcs)
         let debugSystem = DebugVisualizationSystem()
         systems.append(debugSystem)
 
-        // 7. Camera system (updates camera based on player position)
+        // 8. Camera system (updates camera based on player position)
         let cameraSystem = CameraManagementSystem(cameraController: cameraController)
+        cameraSystem.onRoomChanged = { [weak self] roomIndex, playerPosition in
+            self?.onPlayerEnteredRoom(roomIndex: roomIndex, entryPosition: playerPosition)
+        }
         self.cameraManagementSystem = cameraSystem
         systems.append(cameraSystem)
 
@@ -101,6 +121,9 @@ class GameCoordinator {
     }
 
     private func setupWorld() {
+        var spawnPosition: SIMD3<Float>? = nil
+        var spawnRoomIndex: Int = 0
+
         // Load level from JSON
         if let levelData = LevelLoader.loadLevel(filename: "level_001") {
             // Create rooms and searchable items from level data
@@ -111,6 +134,19 @@ class GameCoordinator {
             // Add searchable items to entities (not room children)
             entities.append(contentsOf: result.searchables)
 
+            // Find spawn position from level data
+            if let spawn = findSpawnPosition(levelData: levelData) {
+                spawnPosition = spawn.position
+                spawnRoomIndex = spawn.roomIndex
+
+                if GameConfig.debugLogging {
+                    print("[GameCoordinator] Found spawn point in room \(spawnRoomIndex) at position (\(spawn.position.x), \(spawn.position.y))")
+                }
+            } else {
+                print("[GameCoordinator] Warning: No spawn point found in level, using default position")
+                spawnPosition = SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
+            }
+
             if GameConfig.debugLogging {
                 print("[GameCoordinator] Loaded level with \(roomEntities.count) rooms and \(result.searchables.count) searchable items")
             }
@@ -119,22 +155,37 @@ class GameCoordinator {
             print("[GameCoordinator] Warning: Failed to load level JSON, using POC rooms")
             roomEntities = createPOCRooms()
             entities.append(contentsOf: roomEntities)
+            spawnPosition = SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
         }
 
         // Register rooms with camera system
         cameraManagementSystem?.registerRoomEntities(roomEntities)
 
-        // Create player
+        // Set camera to spawn room
+        cameraManagementSystem?.setInitialRoom(spawnRoomIndex)
+
+        // Use spawn position for player creation (or fall back to default)
+        let finalSpawnPosition = spawnPosition ?? SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
+
+        // Create player at spawn position
         player = createPlayerEntity(
-            startX: GameConfig.playerStartX,
-            startY: GameConfig.playerStartY
+            startX: finalSpawnPosition.x,
+            startY: finalSpawnPosition.y
         )
         if let player = player {
             entities.append(player)
+
+            // Set initial entrance position to spawn position
+            roomEntrancePosition = finalSpawnPosition
+
+            // Set initial room index to spawn room
+            currentRoomIndex = spawnRoomIndex
         }
 
         if GameConfig.debugLogging {
             print("[GameCoordinator] World created: \(entities.count) entities")
+            print("[GameCoordinator] Initial spawn position: (\(finalSpawnPosition.x), \(finalSpawnPosition.y)) in room \(spawnRoomIndex)")
+            print("[GameCoordinator] Initial entrance position: (\(roomEntrancePosition.x), \(roomEntrancePosition.y))")
         }
     }
 
@@ -320,5 +371,85 @@ class GameCoordinator {
             """,
             velocity.dx, minVelocityX, maxVelocityX,
             velocity.dy, minVelocityY, maxVelocityY)
+    }
+
+    // MARK: - Room Management
+
+    /// Called when player enters a new room
+    private func onPlayerEnteredRoom(roomIndex: Int, entryPosition: SIMD3<Float>) {
+        currentRoomIndex = roomIndex
+        roomEntrancePosition = entryPosition
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Player entered room \(roomIndex) at position (\(entryPosition.x), \(entryPosition.y))")
+            print("[GameCoordinator] Room entrance position captured for restart")
+        }
+    }
+
+    // MARK: - Room Restart
+
+    /// Restart the current room by resetting player to entrance position and searchable items
+    private func restartRoom() {
+        guard let player = player else {
+            return
+        }
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Restarting room \(currentRoomIndex)...")
+        }
+
+        // Reset player position to room entrance
+        var position = player.components[PositionComponent.self] ?? PositionComponent(
+            x: roomEntrancePosition.x,
+            y: roomEntrancePosition.y,
+            z: 0
+        )
+        position.x = roomEntrancePosition.x
+        position.y = roomEntrancePosition.y
+        position.z = roomEntrancePosition.z
+        player.components.set(position)
+        player.position = position.simd
+
+        // Reset player velocity
+        var velocity = player.components[VelocityComponent.self] ?? VelocityComponent(dx: 0, dy: 0)
+        velocity.dx = 0
+        velocity.dy = 0
+        player.components.set(velocity)
+
+        // Reset jump state to airborne (will become grounded on next physics update)
+        var jump = player.components[JumpComponent.self] ?? JumpComponent()
+        jump.state = .airborne
+        player.components.set(jump)
+
+        // Reset all searchable items in the current room
+        for entity in entities {
+            guard var searchable = entity.components[SearchableComponent.self],
+                  var progress = entity.components[ProgressComponent.self] else {
+                continue
+            }
+
+            // Reset searchable state
+            if searchable.isSearched || searchable.state == .searching {
+                searchable.state = .searchable
+                searchable.timeSinceLastSearch = 0.0
+                entity.components.set(searchable)
+
+                // Reset progress
+                progress.progress = 0.0
+                entity.components.set(progress)
+
+                // Remove progress bar bubble if it exists
+                if let bubble = entity.children.first(where: { $0.name == "ProgressBarBubble" }) {
+                    bubble.removeFromParent()
+                }
+
+                // Update visual state
+                updateSearchableItemVisual(entity, state: .searchable)
+            }
+        }
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Room restarted - player at (\(position.x), \(position.y))")
+        }
     }
 }

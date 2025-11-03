@@ -547,10 +547,191 @@ func createRoomFromJSON(roomData: RoomData, roomIndex: Int) -> (room: Entity, se
     return (room: room, searchables: searchableItems)
 }
 
+/// Creates a room entity from JSON room data with connection-based doors.
+/// - Parameters:
+///   - roomData: Room data loaded from JSON
+///   - roomIndex: Index of the room in the level layout
+///   - gridRow: Row in the grid layout
+///   - gridCol: Column in the grid layout
+///   - hasLeftDoor: Whether this room has a door on the left wall
+///   - hasRightDoor: Whether this room has a door on the right wall
+///   - hasTopDoor: Whether this room has a door on the top wall
+///   - hasBottomDoor: Whether this room has a door on the bottom wall
+/// - Returns: Tuple containing (room entity, array of searchable item entities)
+func createRoomFromJSONWithConnections(
+    roomData: RoomData,
+    roomIndex: Int,
+    gridRow: Int,
+    gridCol: Int,
+    hasLeftDoor: Bool,
+    hasRightDoor: Bool,
+    hasTopDoor: Bool,
+    hasBottomDoor: Bool
+) -> (room: Entity, searchables: [Entity]) {
+    let room = Entity()
+    room.name = "Room_\(roomData.id)_r\(gridRow)c\(gridCol)"
+
+    // Collect searchable items separately
+    var searchableItems: [Entity] = []
+
+    // Calculate room bounds based on grid position
+    // For now, use horizontal layout (col determines X position)
+    // In future, could support vertical stacking (row determines Y position)
+    let minX = Float(gridCol) * GameConfig.roomWidth
+    let maxX = minX + GameConfig.roomWidth
+    let minY: Float = 0
+    let maxY = GameConfig.roomHeight
+
+    // Add room bounds component
+    let roomBounds = RoomBoundsComponent(
+        minX: minX,
+        maxX: maxX,
+        minY: minY,
+        maxY: maxY,
+        roomIndex: roomIndex
+    )
+    room.components.set(roomBounds)
+
+    // Determine doorway heights (use standard player height + 2 tiles)
+    let doorwayHeight = GameConfig.playerHeightTiles + 2
+
+    // Get theme colors
+    let wallColor = roomData.theme?.wallColor.flatMap { UIColor.from(string: $0) } ?? .darkGray
+    let floorColor = roomData.theme?.floorColor.flatMap { UIColor.from(string: $0) } ?? .gray
+    let ceilingColor = roomData.theme?.ceilingColor.flatMap { UIColor.from(string: $0) } ?? .gray
+
+    // Create floor tiles (bottom row)
+    for x in 0..<roomData.width {
+        // Skip floor tiles where bottom door exists
+        if hasBottomDoor {
+            // For now, skip creating floor door tiles
+            // TODO: Implement bottom doors properly
+        }
+
+        let tile = createTileEntity(
+            x: Float(x) * GameConfig.tileSize + minX,
+            y: 0,
+            color: floorColor,
+            solidType: .floor
+        )
+        room.addChild(tile)
+    }
+
+    // Create ceiling tiles (top row)
+    for x in 0..<roomData.width {
+        // Skip ceiling tiles where top door exists
+        if hasTopDoor {
+            // For now, skip creating ceiling door tiles
+            // TODO: Implement top doors properly
+        }
+
+        let tile = createTileEntity(
+            x: Float(x) * GameConfig.tileSize + minX,
+            y: Float(roomData.height - 1) * GameConfig.tileSize,
+            color: ceilingColor,
+            solidType: .ceiling
+        )
+        room.addChild(tile)
+    }
+
+    // Create left wall tiles
+    for y in 1..<(roomData.height - 1) {
+        // Skip entry area if left door exists
+        if hasLeftDoor && y < doorwayHeight {
+            continue
+        }
+
+        let tile = createTileEntity(
+            x: minX,
+            y: Float(y) * GameConfig.tileSize,
+            color: wallColor,
+            solidType: .wall
+        )
+        room.addChild(tile)
+    }
+
+    // Create right wall tiles
+    for y in 1..<(roomData.height - 1) {
+        // Skip entry area if right door exists
+        if hasRightDoor && y < doorwayHeight {
+            continue
+        }
+
+        let tile = createTileEntity(
+            x: maxX - GameConfig.tileSize,
+            y: Float(y) * GameConfig.tileSize,
+            color: wallColor,
+            solidType: .wall
+        )
+        room.addChild(tile)
+    }
+
+    // Create interior tiles from JSON data
+    let maxInteriorRows = roomData.height - 2
+    let maxInteriorCols = roomData.width - 2
+
+    for (interiorY, row) in roomData.interior.enumerated() {
+        if interiorY >= maxInteriorRows {
+            break
+        }
+
+        for (interiorX, tileId) in row.enumerated() {
+            if interiorX >= maxInteriorCols {
+                break
+            }
+
+            // Skip empty tiles
+            guard let tileType = TileType(rawValue: tileId),
+                  tileType != .empty else {
+                continue
+            }
+
+            // Convert interior coordinates to world coordinates
+            let worldX = Float(row.count - interiorX) * GameConfig.tileSize + minX
+            let worldY = Float(roomData.interior.count - interiorY) * GameConfig.tileSize
+
+            // Handle searchable items separately
+            if tileType == .searchable {
+                let item = createSearchableItem(x: worldX, y: worldY)
+                searchableItems.append(item)
+            } else if let solidType = tileType.solidType {
+                // Create solid tile
+                let tile = createTileEntity(
+                    x: worldX,
+                    y: worldY,
+                    color: tileType.defaultColor,
+                    solidType: solidType
+                )
+                room.addChild(tile)
+            }
+        }
+    }
+
+    if GameConfig.debugLogging {
+        print("[RoomEntity] Created room \(roomData.id) at grid(\(gridRow),\(gridCol)) with doors: L=\(hasLeftDoor) R=\(hasRightDoor) T=\(hasTopDoor) B=\(hasBottomDoor)")
+    }
+
+    return (room: room, searchables: searchableItems)
+}
+
 /// Creates rooms from a loaded level and layout.
 /// - Parameter levelData: Level data loaded from JSON
 /// - Returns: Tuple containing (array of room entities, array of all searchable items)
 func createRoomsFromLevel(levelData: LevelData) -> (rooms: [Entity], searchables: [Entity]) {
+    // Use floor_layouts if available, otherwise fall back to old layout system
+    if let floorLayouts = levelData.floorLayouts, !floorLayouts.isEmpty {
+        // Use new grid-based layout system
+        return createRoomsFromFloorLayouts(floorLayouts: floorLayouts, levelData: levelData)
+    } else {
+        // Use old linear layout system
+        return createRoomsFromLinearLayout(levelData: levelData)
+    }
+}
+
+/// Creates rooms from the old linear layout system (backwards compatibility)
+/// - Parameter levelData: Level data loaded from JSON
+/// - Returns: Tuple containing (array of room entities, array of all searchable items)
+private func createRoomsFromLinearLayout(levelData: LevelData) -> (rooms: [Entity], searchables: [Entity]) {
     var rooms: [Entity] = []
     var allSearchables: [Entity] = []
 
@@ -571,8 +752,227 @@ func createRoomsFromLevel(levelData: LevelData) -> (rooms: [Entity], searchables
     }
 
     if GameConfig.debugLogging {
-        print("[RoomEntity] Created \(rooms.count) rooms with \(allSearchables.count) searchable items from level data")
+        print("[RoomEntity] Created \(rooms.count) rooms with \(allSearchables.count) searchable items from linear layout")
     }
 
     return (rooms: rooms, searchables: allSearchables)
+}
+
+/// Creates rooms from the new grid-based floor layout system
+/// - Parameters:
+///   - floorLayouts: Array of floor layouts from JSON
+///   - levelData: Level data containing room definitions
+/// - Returns: Tuple containing (array of room entities, array of all searchable items)
+private func createRoomsFromFloorLayouts(floorLayouts: [FloorLayout], levelData: LevelData) -> (rooms: [Entity], searchables: [Entity]) {
+    var rooms: [Entity] = []
+    var allSearchables: [Entity] = []
+    var roomIndexCounter = 0
+
+    // Process each floor layout (typically just one, but support multiple)
+    for (floorIndex, floorLayout) in floorLayouts.enumerated() {
+        if GameConfig.debugLogging {
+            print("[RoomEntity] Processing floor layout \(floorIndex): \(floorLayout.rows)x\(floorLayout.cols) grid")
+        }
+
+        // Build a map of grid positions to their connections
+        var connectionMap: [String: [(direction: String, doorPosition: String)]] = [:]
+
+        for connection in floorLayout.connections {
+            let fromKey = "\(connection.from.row),\(connection.from.col)"
+            let toKey = "\(connection.to.row),\(connection.to.col)"
+
+            // Determine direction of connection
+            // Note: Grid is horizontally mirrored, so left/right are flipped
+            if connection.from.row == connection.to.row {
+                // Horizontal connection (same row)
+                if connection.from.col < connection.to.col {
+                    // From has lower col index in grid, which means FROM is to the RIGHT in world
+                    connectionMap[fromKey, default: []].append((direction: "left", doorPosition: connection.doorPosition))
+                    connectionMap[toKey, default: []].append((direction: "right", doorPosition: connection.doorPosition))
+                } else {
+                    // From has higher col index in grid, which means FROM is to the LEFT in world
+                    connectionMap[fromKey, default: []].append((direction: "right", doorPosition: connection.doorPosition))
+                    connectionMap[toKey, default: []].append((direction: "left", doorPosition: connection.doorPosition))
+                }
+            } else if connection.from.col == connection.to.col {
+                // Vertical connection (same column)
+                if connection.from.row < connection.to.row {
+                    // From is above To
+                    connectionMap[fromKey, default: []].append((direction: "bottom", doorPosition: connection.doorPosition))
+                    connectionMap[toKey, default: []].append((direction: "top", doorPosition: connection.doorPosition))
+                } else {
+                    // From is below To
+                    connectionMap[fromKey, default: []].append((direction: "top", doorPosition: connection.doorPosition))
+                    connectionMap[toKey, default: []].append((direction: "bottom", doorPosition: connection.doorPosition))
+                }
+            }
+        }
+
+        // Create rooms for each grid position
+        for row in 0..<floorLayout.rows {
+            for col in 0..<floorLayout.cols {
+                guard row < floorLayout.grid.count,
+                      col < floorLayout.grid[row].count else {
+                    continue
+                }
+
+                let roomId = floorLayout.grid[row][col]
+
+                // Find the room data
+                guard let roomData = LevelLoader.getRoom(id: roomId, from: levelData) else {
+                    print("[RoomEntity] Warning: Could not find room with ID \(roomId) at grid position (\(row), \(col))")
+                    continue
+                }
+
+                // Get connections for this grid position
+                let gridKey = "\(row),\(col)"
+                let connections = connectionMap[gridKey] ?? []
+
+                // Determine which walls have doorways
+                let hasLeftDoor = connections.contains { $0.direction == "left" }
+                let hasRightDoor = connections.contains { $0.direction == "right" }
+                let hasTopDoor = connections.contains { $0.direction == "top" }
+                let hasBottomDoor = connections.contains { $0.direction == "bottom" }
+
+                // Create the room with connections
+                // Note: Grid columns are mirrored horizontally to match level editor
+                // grid[row][0] = rightmost room in world, grid[row][last] = leftmost room in world
+                // This matches how room interiors are mirrored
+                let worldCol = floorLayout.cols - 1 - col
+                let result = createRoomFromJSONWithConnections(
+                    roomData: roomData,
+                    roomIndex: roomIndexCounter,
+                    gridRow: row,
+                    gridCol: worldCol,
+                    hasLeftDoor: hasLeftDoor,
+                    hasRightDoor: hasRightDoor,
+                    hasTopDoor: hasTopDoor,
+                    hasBottomDoor: hasBottomDoor
+                )
+
+                rooms.append(result.room)
+                allSearchables.append(contentsOf: result.searchables)
+                roomIndexCounter += 1
+            }
+        }
+    }
+
+    if GameConfig.debugLogging {
+        print("[RoomEntity] Created \(rooms.count) rooms with \(allSearchables.count) searchable items from floor layouts")
+    }
+
+    return (rooms: rooms, searchables: allSearchables)
+}
+
+// MARK: - Spawn Point Detection
+
+/// Find the spawn point in the level data
+/// - Parameter levelData: Level data to search
+/// - Returns: Tuple of (world position, room index) or nil if no spawn found
+func findSpawnPosition(levelData: LevelData) -> (position: SIMD3<Float>, roomIndex: Int)? {
+    // Use floor_layouts if available, otherwise fall back to old layout system
+    if let floorLayouts = levelData.floorLayouts, !floorLayouts.isEmpty {
+        return findSpawnInFloorLayouts(floorLayouts: floorLayouts, levelData: levelData)
+    } else {
+        return findSpawnInLinearLayout(levelData: levelData)
+    }
+}
+
+/// Find spawn in the old linear layout system
+private func findSpawnInLinearLayout(levelData: LevelData) -> (position: SIMD3<Float>, roomIndex: Int)? {
+    let sortedLayout = levelData.layout.sorted { $0.position < $1.position }
+
+    for layoutEntry in sortedLayout {
+        guard let roomData = LevelLoader.getRoom(id: layoutEntry.roomId, from: levelData) else {
+            continue
+        }
+
+        if let spawnPos = findSpawnInRoom(roomData: roomData, roomIndex: layoutEntry.position) {
+            return (position: spawnPos, roomIndex: layoutEntry.position)
+        }
+    }
+
+    return nil
+}
+
+/// Find spawn in the new grid-based floor layout system
+private func findSpawnInFloorLayouts(floorLayouts: [FloorLayout], levelData: LevelData) -> (position: SIMD3<Float>, roomIndex: Int)? {
+    var roomIndexCounter = 0
+
+    for floorLayout in floorLayouts {
+        for row in 0..<floorLayout.rows {
+            for col in 0..<floorLayout.cols {
+                guard row < floorLayout.grid.count,
+                      col < floorLayout.grid[row].count else {
+                    continue
+                }
+
+                let roomId = floorLayout.grid[row][col]
+                guard let roomData = LevelLoader.getRoom(id: roomId, from: levelData) else {
+                    continue
+                }
+
+                // Grid columns are mirrored, so convert to world column
+                let worldCol = floorLayout.cols - 1 - col
+
+                if let spawnPos = findSpawnInRoom(roomData: roomData, roomIndex: roomIndexCounter, gridCol: worldCol) {
+                    return (position: spawnPos, roomIndex: roomIndexCounter)
+                }
+
+                roomIndexCounter += 1
+            }
+        }
+    }
+
+    return nil
+}
+
+/// Find spawn tile in a specific room and convert to world coordinates
+private func findSpawnInRoom(roomData: RoomData, roomIndex: Int, gridCol: Int? = nil) -> SIMD3<Float>? {
+    let maxInteriorRows = roomData.height - 2
+    let maxInteriorCols = roomData.width - 2
+
+    // Calculate room's world X position
+    let roomMinX: Float
+    if let col = gridCol {
+        // Grid-based layout
+        roomMinX = Float(col) * GameConfig.roomWidth
+    } else {
+        // Linear layout
+        roomMinX = Float(roomIndex) * GameConfig.roomWidth
+    }
+
+    // Scan interior for spawn tile
+    for (interiorY, row) in roomData.interior.enumerated() {
+        if interiorY >= maxInteriorRows {
+            break
+        }
+
+        for (interiorX, tileId) in row.enumerated() {
+            if interiorX >= maxInteriorCols {
+                break
+            }
+
+            // Check if this is a spawn tile
+            guard let tileType = TileType(rawValue: tileId),
+                  tileType == .spawn else {
+                continue
+            }
+
+            // Convert interior coordinates to world coordinates
+            // X is flipped: interior[y][0] maps to RIGHT side, interior[y][last] maps to LEFT side
+            // Y is flipped: interior[0] maps to top of interior, interior[last] maps to bottom
+            let worldX = Float(row.count - interiorX) * GameConfig.tileSize + roomMinX
+            let worldY = Float(roomData.interior.count - interiorY) * GameConfig.tileSize
+
+            // Return position at center of tile, adjusted for player pivot
+            return SIMD3<Float>(
+                worldX + GameConfig.tileSize / 2.0,
+                worldY + GameConfig.tileSize / 2.0 + GameConfig.playerHeight / 2.0,
+                0
+            )
+        }
+    }
+
+    return nil
 }

@@ -52,11 +52,66 @@ class LevelLoader {
             return "No rooms defined in level"
         }
 
-        // Check that layout references valid rooms
         let roomIds = Set(level.rooms.map { $0.id })
+
+        // Check that layout references valid rooms
         for layoutEntry in level.layout {
             if !roomIds.contains(layoutEntry.roomId) {
                 return "Layout references undefined room ID: \(layoutEntry.roomId)"
+            }
+        }
+
+        // Validate floor_layouts if present
+        if let floorLayouts = level.floorLayouts {
+            for (floorIndex, floorLayout) in floorLayouts.enumerated() {
+                // Check grid dimensions
+                if floorLayout.rows <= 0 || floorLayout.cols <= 0 {
+                    return "Floor layout \(floorIndex) has invalid dimensions: \(floorLayout.rows)x\(floorLayout.cols)"
+                }
+
+                // Check grid array dimensions
+                if floorLayout.grid.count != floorLayout.rows {
+                    return "Floor layout \(floorIndex) grid has \(floorLayout.grid.count) rows, expected \(floorLayout.rows)"
+                }
+
+                for (rowIndex, row) in floorLayout.grid.enumerated() {
+                    if row.count != floorLayout.cols {
+                        return "Floor layout \(floorIndex) row \(rowIndex) has \(row.count) columns, expected \(floorLayout.cols)"
+                    }
+
+                    // Check that all room IDs in grid are valid
+                    for roomId in row {
+                        if !roomIds.contains(roomId) {
+                            return "Floor layout \(floorIndex) grid references undefined room ID: \(roomId)"
+                        }
+                    }
+                }
+
+                // Validate connections
+                for (connIndex, connection) in floorLayout.connections.enumerated() {
+                    // Check that connection positions are within grid bounds
+                    if connection.from.row < 0 || connection.from.row >= floorLayout.rows {
+                        return "Floor layout \(floorIndex) connection \(connIndex) from.row \(connection.from.row) is out of bounds"
+                    }
+                    if connection.from.col < 0 || connection.from.col >= floorLayout.cols {
+                        return "Floor layout \(floorIndex) connection \(connIndex) from.col \(connection.from.col) is out of bounds"
+                    }
+                    if connection.to.row < 0 || connection.to.row >= floorLayout.rows {
+                        return "Floor layout \(floorIndex) connection \(connIndex) to.row \(connection.to.row) is out of bounds"
+                    }
+                    if connection.to.col < 0 || connection.to.col >= floorLayout.cols {
+                        return "Floor layout \(floorIndex) connection \(connIndex) to.col \(connection.to.col) is out of bounds"
+                    }
+
+                    // Check that connection is between adjacent rooms
+                    let rowDiff = abs(connection.from.row - connection.to.row)
+                    let colDiff = abs(connection.from.col - connection.to.col)
+                    if (rowDiff == 0 && colDiff == 1) || (rowDiff == 1 && colDiff == 0) {
+                        // Valid: adjacent horizontally or vertically
+                    } else {
+                        return "Floor layout \(floorIndex) connection \(connIndex) connects non-adjacent rooms: (\(connection.from.row),\(connection.from.col)) to (\(connection.to.row),\(connection.to.col))"
+                    }
+                }
             }
         }
 

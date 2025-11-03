@@ -1,0 +1,12 @@
+{
+  "/Users/chris/xcode/GrimpossibleMission/GrimpossibleMission/Components/DebugLabelComponent.swift" : {
+    "abi-baseline-json" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission.abi.json",
+    "const-values" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission-primary.swiftconstvalues",
+    "dependencies" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission-primary.d",
+    "diagnostics" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission-primary.dia",
+    "objc-header" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission-Swift.h",
+    "swiftdoc" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission.swiftdoc",
+    "swiftmodule" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission.swiftmodule",
+    "swiftsourceinfo" : "/Users/chris/xcode/GrimpossibleMission/build/GrimpossibleMission.build/Release-appletvos/GrimpossibleMission.build/Objects-normal/arm64/GrimpossibleMission.swiftsourceinfo"
+  }
+}

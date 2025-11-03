@@ -115,10 +115,9 @@ class GameControllerInputProvider: InputProvider {
             self?.currentInputState.moveLeft = pressed
         }
 
-        // D-Pad Up (Interact)
+        // D-Pad Up (used for searching, NOT interact/restart)
         gamepad.dpad.up.valueChangedHandler = { [weak self] (button, value, pressed) in
             self?.currentInputState.moveUp = pressed
-            self?.currentInputState.interact = pressed
         }
 
         // D-Pad Down
@@ -173,7 +172,7 @@ class GameControllerInputProvider: InputProvider {
 
         // B Button - CAPTURE this to prevent app exit
         // On Xbox this is B, on PlayStation this is Circle
-        gamepad.buttonB.valueChangedHandler = { [weak self] (button, value, pressed) in
+        gamepad.buttonB.valueChangedHandler = { (button, value, pressed) in
             // Handle B button for game logic (currently unused)
             // This handler prevents the default tvOS behavior of exiting the app
             if GameConfig.debugLogging && pressed {
@@ -181,23 +180,23 @@ class GameControllerInputProvider: InputProvider {
             }
         }
 
-        // X Button (Interact) - Xbox X, PlayStation Square
+        // X Button (Restart) - Xbox X, PlayStation Square
         gamepad.buttonX.valueChangedHandler = { [weak self] (button, value, pressed) in
             self?.currentInputState.interact = pressed
         }
 
         // Y Button - Xbox Y, PlayStation Triangle
-        gamepad.buttonY.valueChangedHandler = { [weak self] (button, value, pressed) in
+        gamepad.buttonY.valueChangedHandler = { (button, value, pressed) in
             // Reserved for future use
         }
 
-        // Left/Right Shoulder Buttons (alternate interact)
-        gamepad.leftShoulder.valueChangedHandler = { [weak self] (button, value, pressed) in
-            self?.currentInputState.interact = self?.currentInputState.interact ?? false || pressed
+        // Left/Right Shoulder Buttons (reserved for future use)
+        gamepad.leftShoulder.valueChangedHandler = { (button, value, pressed) in
+            // Reserved for future use
         }
 
-        gamepad.rightShoulder.valueChangedHandler = { [weak self] (button, value, pressed) in
-            self?.currentInputState.interact = self?.currentInputState.interact ?? false || pressed
+        gamepad.rightShoulder.valueChangedHandler = { (button, value, pressed) in
+            // Reserved for future use
         }
 
         if GameConfig.debugLogging {

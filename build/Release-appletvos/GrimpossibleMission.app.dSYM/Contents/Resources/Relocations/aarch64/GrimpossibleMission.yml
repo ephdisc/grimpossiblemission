@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/chris/xcode/GrimpossibleMission/build/Release-appletvos/GrimpossibleMission.app/GrimpossibleMission'
+relocations:     []
+...

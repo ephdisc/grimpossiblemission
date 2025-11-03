@@ -46,6 +46,21 @@ class OrthographicCameraController: CameraController {
         )
     }
 
+    /// Set the initial camera position to a specific room
+    func setInitialRoom(_ roomIndex: Int) {
+        currentMode = .staticRoom(roomIndex: roomIndex)
+        updateTargetPosition(for: currentMode)
+
+        // Set current position to target immediately (no lerp on initialization)
+        currentPosition = targetPosition
+        cameraEntity.position = currentPosition
+
+        // Update look-at target
+        let roomCenterY = Float(GameConfig.roomHeight) / 2.0
+        let lookAtTarget = SIMD3<Float>(currentPosition.x, roomCenterY, 0)
+        cameraEntity.look(at: lookAtTarget, from: currentPosition, relativeTo: nil)
+    }
+
     /// Register room bounds for camera management
     func registerRooms(_ roomBounds: [RoomBoundsComponent]) {
         self.rooms = roomBounds.sorted { $0.roomIndex < $1.roomIndex }
@@ -118,6 +133,10 @@ class CameraManagementSystem: GameSystem {
 
     private let cameraController: OrthographicCameraController
     private var rooms: [Entity] = []
+    private var currentRoomIndex: Int = 0
+
+    // Callback when player enters a new room
+    var onRoomChanged: ((Int, SIMD3<Float>) -> Void)?
 
     init(cameraController: OrthographicCameraController) {
         self.cameraController = cameraController
@@ -132,6 +151,16 @@ class CameraManagementSystem: GameSystem {
         cameraController.registerRooms(roomBounds)
     }
 
+    /// Set the initial room index (for spawn positioning)
+    func setInitialRoom(_ roomIndex: Int) {
+        currentRoomIndex = roomIndex
+        cameraController.setInitialRoom(roomIndex)
+
+        if GameConfig.debugLogging {
+            print("[CameraSystem] Initial room set to \(roomIndex)")
+        }
+    }
+
     func update(deltaTime: TimeInterval, entities: [Entity]) {
         // Find player entity
         guard let player = entities.first(where: { $0.components[PlayerComponent.self] != nil }),
@@ -140,10 +169,22 @@ class CameraManagementSystem: GameSystem {
         }
 
         // Determine which room the player is in
-        let currentRoom = determinePlayerRoom(playerPosition: playerPosition)
+        let roomIndex = determinePlayerRoom(playerPosition: playerPosition)
+
+        // Check if player entered a new room
+        if roomIndex != currentRoomIndex {
+            if GameConfig.debugLogging {
+                print("[CameraSystem] Player entered room \(roomIndex) from room \(currentRoomIndex)")
+            }
+
+            currentRoomIndex = roomIndex
+
+            // Notify delegate with room index and player position
+            onRoomChanged?(roomIndex, playerPosition.simd)
+        }
 
         // Set camera mode based on player location
-        let cameraMode: CameraMode = .staticRoom(roomIndex: currentRoom)
+        let cameraMode: CameraMode = .staticRoom(roomIndex: roomIndex)
 
         // Update camera
         cameraController.update(

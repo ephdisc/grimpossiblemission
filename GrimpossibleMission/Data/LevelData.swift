@@ -15,11 +15,13 @@ struct LevelData: Codable {
     let rooms: [RoomData]
     let layout: [RoomLayoutEntry]
     let tileTypes: [String: TileTypeDefinition]?  // Optional tile type customization
+    let floorLayouts: [FloorLayout]?  // Optional 2D grid-based layouts with connections
 
     enum CodingKeys: String, CodingKey {
         case rooms
         case layout
         case tileTypes = "tile_types"
+        case floorLayouts = "floor_layouts"
     }
 }
 
@@ -89,6 +91,33 @@ struct RoomLayoutEntry: Codable {
     }
 }
 
+/// 2D grid-based floor layout with connections
+struct FloorLayout: Codable {
+    let rows: Int
+    let cols: Int
+    let grid: [[Int]]  // 2D array of room IDs (grid[row][col])
+    let connections: [RoomConnection]
+}
+
+/// Connection between two rooms in a floor layout
+struct RoomConnection: Codable {
+    let from: GridPosition
+    let to: GridPosition
+    let doorPosition: String  // "top", "bot", "left", "right"
+
+    enum CodingKeys: String, CodingKey {
+        case from
+        case to
+        case doorPosition = "door_position"
+    }
+}
+
+/// Position in a grid layout
+struct GridPosition: Codable {
+    let row: Int
+    let col: Int
+}
+
 // MARK: - Tile Type Mapping
 
 /// Maps tile IDs to solid types
@@ -96,12 +125,13 @@ enum TileType: Int {
     case empty = 0
     case block = 1
     case platform = 2
+    case spawn = 8
     case searchable = 9
 
     /// Convert tile type to solid type for collision
     var solidType: SolidType? {
         switch self {
-        case .empty, .searchable:
+        case .empty, .spawn, .searchable:
             return nil
         case .block:
             return .block
@@ -119,6 +149,8 @@ enum TileType: Int {
             return .systemBrown
         case .platform:
             return .systemGreen
+        case .spawn:
+            return .magenta
         }
     }
 }
