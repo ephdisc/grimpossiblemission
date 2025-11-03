@@ -185,9 +185,22 @@ class PhysicsSystem: GameSystem {
         var hitWall = false
         var hitFloor = false
 
-        // Get player bounds (assuming 1x2x1 for now)
-        let playerHalfWidth: Float = GameConfig.playerWidth / 2.0
-        let playerHalfHeight: Float = GameConfig.playerHeight / 2.0
+        // Get player bounds - use hitbox if available, otherwise use full entity bounds
+        let playerHalfWidth: Float
+        let playerHalfHeight: Float
+        let playerCenterOffsetY: Float
+
+        if let hitbox = entity.components[HitboxComponent.self] {
+            // Use hitbox bounds
+            playerHalfWidth = hitbox.width / 2.0
+            playerHalfHeight = hitbox.height / 2.0
+            playerCenterOffsetY = hitbox.offsetY
+        } else {
+            // Use full entity bounds
+            playerHalfWidth = GameConfig.playerWidth / 2.0
+            playerHalfHeight = GameConfig.playerHeight / 2.0
+            playerCenterOffsetY = 0
+        }
 
         // Check collision with each solid
         for solid in solids {
@@ -199,11 +212,12 @@ class PhysicsSystem: GameSystem {
             let solidPos = solid.position
             let solidBounds = solidComponent.bounds
 
-            // Calculate AABB bounds
+            // Calculate AABB bounds (account for hitbox offset)
+            let hitboxCenterY = finalPosition.y + playerCenterOffsetY
             let playerLeft = finalPosition.x - playerHalfWidth
             let playerRight = finalPosition.x + playerHalfWidth
-            let playerBottom = finalPosition.y - playerHalfHeight
-            let playerTop = finalPosition.y + playerHalfHeight
+            let playerBottom = hitboxCenterY - playerHalfHeight
+            let playerTop = hitboxCenterY + playerHalfHeight
 
             let solidLeft = solidPos.x - solidBounds.x / 2.0
             let solidRight = solidPos.x + solidBounds.x / 2.0
@@ -224,12 +238,14 @@ class PhysicsSystem: GameSystem {
 
                 if isHorizontallyAligned && isNearOrOnFloor {
                     // Check if player is approaching from above (or resting from above)
-                    let playerBottomEdge = currentPosition.y - playerHalfHeight
+                    let currentHitboxCenterY = currentPosition.y + playerCenterOffsetY
+                    let playerBottomEdge = currentHitboxCenterY - playerHalfHeight
                     let isFromAbove = playerBottomEdge >= solidTop - GameConfig.collisionTolerance
 
                     // Hit floor/platform from above OR resting on it
                     if velocity.dy <= 0 && isFromAbove {
-                        finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance
+                        // Position entity so hitbox bottom is at solidTop
+                        finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance - playerCenterOffsetY
                         finalVelocity.dy = 0
                         hitFloor = true  // Mark that we hit floor (this means grounded)
                     }
@@ -240,7 +256,8 @@ class PhysicsSystem: GameSystem {
                 if isHorizontallyAligned && playerTop > solidBottom && playerBottom < solidTop {
                     // Hit ceiling from below
                     if velocity.dy > 0 {  // Moving up
-                        finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance
+                        // Position entity so hitbox top is at solidBottom
+                        finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance - playerCenterOffsetY
                         finalVelocity.dy = 0
                         hitCeiling = true
                     }
@@ -273,11 +290,13 @@ class PhysicsSystem: GameSystem {
 
                 if isHorizontallyAligned && isNearOrOnBlock {
                     // Check if approaching from above (landing on top)
-                    let playerBottomEdge = currentPosition.y - playerHalfHeight
+                    let currentHitboxCenterY = currentPosition.y + playerCenterOffsetY
+                    let playerBottomEdge = currentHitboxCenterY - playerHalfHeight
                     let isFromAbove = playerBottomEdge >= solidTop - GameConfig.collisionTolerance
 
                     if velocity.dy <= 0 && isFromAbove {
-                        finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance
+                        // Position entity so hitbox bottom is at solidTop
+                        finalPosition.y = solidTop + playerHalfHeight + GameConfig.collisionTolerance - playerCenterOffsetY
                         finalVelocity.dy = 0
                         hitFloor = true
                     }
@@ -289,7 +308,8 @@ class PhysicsSystem: GameSystem {
 
                     // Hit from below (ceiling collision)
                     if velocity.dy > 0 && currentPosition.y < solidPos.y {
-                        finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance
+                        // Position entity so hitbox top is at solidBottom
+                        finalPosition.y = solidBottom - playerHalfHeight - GameConfig.collisionTolerance - playerCenterOffsetY
                         finalVelocity.dy = 0
                         hitCeiling = true
                     }

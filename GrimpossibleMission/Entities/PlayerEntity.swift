@@ -65,6 +65,16 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     let collisionShape = ShapeResource.generateBox(size: playerSize)
     let collisionComponent = CollisionComponent(shapes: [collisionShape])
 
+    // Hitbox component (bottom 3 tiles for collision)
+    // Player is 2.0 tall (4 tiles), hitbox is 1.5 tall (3 tiles at bottom)
+    // Player center is at position.y, so offset -0.25 to place hitbox at bottom 3 tiles
+    let hitboxComponent = HitboxComponent(
+        width: GameConfig.playerWidth,
+        height: GameConfig.tileSize * 3.0,  // 3 tiles = 1.5 units
+        offsetX: 0,
+        offsetY: -0.25  // Offset to position at bottom 3 tiles
+    )
+
     // Set all components
     player.components.set(modelComponent)
     player.components.set(positionComponent)
@@ -75,6 +85,7 @@ func createPlayerEntity(startX: Float, startY: Float) -> Entity {
     player.components.set(jumpComponent)
     player.components.set(gravityComponent)
     player.components.set(collisionComponent)
+    player.components.set(hitboxComponent)
 
     // Set initial transform
     player.position = positionComponent.simd
