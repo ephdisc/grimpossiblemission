@@ -22,7 +22,8 @@ protocol CameraController {
     ///   - deltaTime: Time elapsed since last frame
     ///   - playerPosition: Current player position
     ///   - mode: Current camera mode
-    func update(deltaTime: TimeInterval, playerPosition: SIMD3<Float>, mode: CameraMode)
+    ///   - debugZoom: Whether debug zoom is active (zooms out to see all rooms)
+    func update(deltaTime: TimeInterval, playerPosition: SIMD3<Float>, mode: CameraMode, debugZoom: Bool)
 
     /// Get the camera entity
     var cameraEntity: Entity { get }

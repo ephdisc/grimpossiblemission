@@ -18,6 +18,7 @@ struct InputStateComponent: Component {
     // Action inputs
     var jump: Bool = false
     var interact: Bool = false    // X button - used for room restart when held
+    var debugZoom: Bool = false   // R button - debug camera zoom to see all rooms
 
     // Restart tracking (X button hold)
     var restartHoldTime: Float = 0.0

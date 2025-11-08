@@ -190,13 +190,17 @@ class GameControllerInputProvider: InputProvider {
             // Reserved for future use
         }
 
-        // Left/Right Shoulder Buttons (reserved for future use)
+        // Left Shoulder Button (reserved for future use)
         gamepad.leftShoulder.valueChangedHandler = { (button, value, pressed) in
             // Reserved for future use
         }
 
-        gamepad.rightShoulder.valueChangedHandler = { (button, value, pressed) in
-            // Reserved for future use
+        // Right Shoulder Button (R) - Debug camera zoom to see all rooms
+        gamepad.rightShoulder.valueChangedHandler = { [weak self] (button, value, pressed) in
+            self?.currentInputState.debugZoom = pressed
+            if GameConfig.debugLogging {
+                print("[Input] R button \(pressed ? "pressed" : "released") - debug zoom \(pressed ? "ON" : "OFF")")
+            }
         }
 
         if GameConfig.debugLogging {

@@ -111,8 +111,13 @@ class RoomEditorTab(QWidget):
 
         self.setLayout(main_layout)
 
-        # Create initial room if none exists
-        if not self.level.rooms:
+        # Populate room list with existing rooms or create initial room
+        if self.level.rooms:
+            self.refresh_room_list()
+            # Select first room
+            if self.room_list.count() > 0:
+                self.room_list.setCurrentRow(0)
+        else:
             self.create_new_room()
 
     def create_room_list_panel(self) -> QWidget:
@@ -295,6 +300,13 @@ class RoomEditorTab(QWidget):
             item = QListWidgetItem(f"Room {room.id} ({room.width}x{room.height})")
             item.setData(Qt.UserRole, room.id)
             self.room_list.addItem(item)
+
+    def refresh(self):
+        """Refresh the entire tab."""
+        self.refresh_room_list()
+        # Select first room if available and nothing is selected
+        if self.room_list.count() > 0 and not self.current_room:
+            self.room_list.setCurrentRow(0)
 
     def create_new_room(self):
         """Create a new room."""
@@ -632,8 +644,11 @@ class LevelEditor(QMainWindow):
 
     def on_tab_changed(self, index):
         """Handle tab change events."""
-        # If switching to Layout Editor tab, refresh it
-        if index == 1:  # Layout Editor is the second tab (index 1)
+        # Refresh the tab being switched to
+        if index == 0:  # Room Editor is the first tab (index 0)
+            if hasattr(self, 'room_editor'):
+                self.room_editor.refresh()
+        elif index == 1:  # Layout Editor is the second tab (index 1)
             if hasattr(self, 'layout_editor'):
                 self.layout_editor.refresh()
 

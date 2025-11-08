@@ -10,37 +10,51 @@ import RealityKit
 
 struct ContentView: View {
 
-    // Game coordinator manages ECS lifecycle
-    private let gameCoordinator: GameCoordinator
-
-    // Debug info for player velocity
-    @State private var velocityInfo: String = ""
-    @State private var updateTimer: Timer?
-
-    init() {
+    // Game coordinator manages ECS lifecycle (uses @StateObject to persist across view updates)
+    @StateObject private var gameCoordinator: GameCoordinator = {
         // Set up dependency injection
         let inputProvider = GameControllerInputProvider()
         let cameraController = OrthographicCameraController()
 
         // Create game coordinator with dependencies
-        self.gameCoordinator = GameCoordinator(
+        return GameCoordinator(
             inputProvider: inputProvider,
             cameraController: cameraController
         )
-    }
+    }()
+
+    // Debug info for player velocity
+    @State private var velocityInfo: String = ""
+    @State private var updateTimer: Timer?
+
+    // Track if initialization has run
+    @State private var hasInitialized: Bool = false
 
     var body: some View {
         ZStack {
             // Main game view
             RealityView { content in
-                // Add all game entities to the scene
-                gameCoordinator.addEntitiesToScene(content)
+                // Only run initialization once (SwiftUI may call this closure multiple times)
+                if !hasInitialized {
+                    if GameConfig.debugLogging {
+                        print("[ContentView] RealityKit scene created - starting structured initialization")
+                    }
 
-                // Start game loop
-                gameCoordinator.start()
+                    // Phase 3: Add all game entities to the RealityKit scene
+                    gameCoordinator.addEntitiesToScene(content)
 
-                if GameConfig.debugLogging {
-                    print("[ContentView] Game scene initialized")
+                    // Phase 4: Start initialization sequence (event-driven, will start physics when ready)
+                    gameCoordinator.startInitialization()
+
+                    if GameConfig.debugLogging {
+                        print("[ContentView] Initialization sequence started - physics will begin when world is ready")
+                    }
+
+                    hasInitialized = true
+                } else {
+                    if GameConfig.debugLogging {
+                        print("[ContentView] ⚠️ RealityView content closure called again - skipping duplicate initialization")
+                    }
                 }
             }
             .ignoresSafeArea()

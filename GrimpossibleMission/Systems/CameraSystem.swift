@@ -15,7 +15,9 @@ class OrthographicCameraController: CameraController {
     private var currentMode: CameraMode = .staticRoom(roomIndex: 0)
     private var targetPosition: SIMD3<Float>
     private var currentPosition: SIMD3<Float>
-    private var rooms: [RoomBoundsComponent] = []
+    fileprivate var rooms: [RoomBoundsComponent] = []  // fileprivate for CameraManagementSystem access
+    private var debugZoomActive: Bool = false
+    private var currentZoomDistance: Float = GameConfig.cameraDistance
 
     init() {
         // Create camera entity
@@ -66,12 +68,40 @@ class OrthographicCameraController: CameraController {
         self.rooms = roomBounds.sorted { $0.roomIndex < $1.roomIndex }
     }
 
-    func update(deltaTime: TimeInterval, playerPosition: SIMD3<Float>, mode: CameraMode) {
+    func update(deltaTime: TimeInterval, playerPosition: SIMD3<Float>, mode: CameraMode, debugZoom: Bool = false) {
         // Update mode if changed
         if !modesEqual(currentMode, mode) {
             currentMode = mode
             updateTargetPosition(for: mode)
         }
+
+        // Handle debug zoom
+        if debugZoom != debugZoomActive {
+            debugZoomActive = debugZoom
+            if GameConfig.debugLogging {
+                print("[CameraController] Debug zoom \(debugZoom ? "activated" : "deactivated")")
+            }
+        }
+
+        // Calculate target zoom distance
+        let targetZoomDistance: Float
+        if debugZoomActive {
+            // Zoom out to see all rooms (calculate based on number of rooms)
+            // Assuming rooms are laid out horizontally
+            let totalRooms = max(rooms.count, 1)
+            let totalWidth = Float(totalRooms) * GameConfig.roomWidth
+            // Camera needs to be far enough to see the full width (rough calculation)
+            targetZoomDistance = totalWidth * 0.6  // Adjust multiplier as needed
+        } else {
+            targetZoomDistance = GameConfig.cameraDistance
+        }
+
+        // Smoothly interpolate zoom distance
+        let zoomLerpFactor = min(Float(deltaTime) * 3.0, 1.0)  // Faster zoom transition
+        currentZoomDistance = simd_mix(currentZoomDistance, targetZoomDistance, zoomLerpFactor)
+
+        // Update target position Z based on current zoom
+        targetPosition.z = -currentZoomDistance
 
         // Smoothly interpolate to target position (lateral translation only)
         let lerpFactor = min(Float(deltaTime / GameConfig.cameraTransitionDuration), 1.0)
@@ -90,13 +120,16 @@ class OrthographicCameraController: CameraController {
         switch mode {
         case .staticRoom(let roomIndex):
             // Position camera to view entire room
+            // Find the room by its roomIndex field, not by array position
             let roomCenterX: Float
-            if roomIndex < rooms.count {
-                let room = rooms[roomIndex]
+            if let room = rooms.first(where: { $0.roomIndex == roomIndex }) {
                 roomCenterX = room.center.x
             } else {
-                // Default to room index calculation
+                // Fallback: assume horizontal layout (should not happen with proper registration)
                 roomCenterX = Float(roomIndex) * GameConfig.roomWidth + GameConfig.roomWidth / 2.0
+                if GameConfig.debugLogging {
+                    print("[CameraController] ⚠️ Room \(roomIndex) not found in registered rooms, using fallback position")
+                }
             }
 
             targetPosition = SIMD3<Float>(
@@ -134,9 +167,13 @@ class CameraManagementSystem: GameSystem {
     private let cameraController: OrthographicCameraController
     private var rooms: [Entity] = []
     private var currentRoomIndex: Int = 0
+    private var lastDebugZoomState: Bool = false
 
     // Callback when player enters a new room
     var onRoomChanged: ((Int, SIMD3<Float>) -> Void)?
+
+    // Callback when debug zoom is activated (to generate all rooms)
+    var onDebugZoomActivated: (() -> Void)?
 
     init(cameraController: OrthographicCameraController) {
         self.cameraController = cameraController
@@ -149,6 +186,27 @@ class CameraManagementSystem: GameSystem {
         // Extract room bounds and register with camera controller
         let roomBounds = roomEntities.compactMap { $0.components[RoomBoundsComponent.self] }
         cameraController.registerRooms(roomBounds)
+    }
+
+    /// Register a single room entity (for lazy loading)
+    func registerRoomEntity(_ roomEntity: Entity, at index: Int) {
+        // Append to rooms array if not already present
+        if !rooms.contains(where: { $0 === roomEntity }) {
+            rooms.append(roomEntity)
+        }
+
+        // Update camera controller's room bounds
+        if let roomBounds = roomEntity.components[RoomBoundsComponent.self] {
+            var allBounds = cameraController.rooms
+            // Replace or add the bounds for this room index
+            if let existingIndex = allBounds.firstIndex(where: { $0.roomIndex == index }) {
+                allBounds[existingIndex] = roomBounds
+            } else {
+                allBounds.append(roomBounds)
+                allBounds.sort { $0.roomIndex < $1.roomIndex }
+            }
+            cameraController.registerRooms(allBounds)
+        }
     }
 
     /// Set the initial room index (for spawn positioning)
@@ -168,6 +226,18 @@ class CameraManagementSystem: GameSystem {
             return
         }
 
+        // Get debug zoom state from player input
+        let debugZoom = player.components[InputStateComponent.self]?.debugZoom ?? false
+
+        // Detect debug zoom activation (transition from false to true)
+        if debugZoom && !lastDebugZoomState {
+            if GameConfig.debugLogging {
+                print("[CameraSystem] Debug zoom activated - requesting all rooms generation")
+            }
+            onDebugZoomActivated?()
+        }
+        lastDebugZoomState = debugZoom
+
         // Determine which room the player is in
         let roomIndex = determinePlayerRoom(playerPosition: playerPosition)
 
@@ -186,11 +256,12 @@ class CameraManagementSystem: GameSystem {
         // Set camera mode based on player location
         let cameraMode: CameraMode = .staticRoom(roomIndex: roomIndex)
 
-        // Update camera
+        // Update camera with debug zoom state
         cameraController.update(
             deltaTime: deltaTime,
             playerPosition: playerPosition.simd,
-            mode: cameraMode
+            mode: cameraMode,
+            debugZoom: debugZoom
         )
     }
 

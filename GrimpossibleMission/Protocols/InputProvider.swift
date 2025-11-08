@@ -15,6 +15,7 @@ struct InputState {
     var moveDown: Bool = false
     var jump: Bool = false
     var interact: Bool = false
+    var debugZoom: Bool = false  // R button - zooms out camera to see all rooms
 }
 
 /// Protocol for providing input from various sources (game controller, remote, keyboard).

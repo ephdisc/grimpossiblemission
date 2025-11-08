@@ -217,6 +217,11 @@ class DoorSelectorButton(QPushButton):
     def cycle_door_position(self):
         """Cycle through door positions."""
         positions = DoorPosition.get_all_positions()
+
+        # Handle case where current position is not in valid positions list
+        if self.door_position not in positions:
+            self.door_position = DoorPosition.NONE
+
         current_index = positions.index(self.door_position)
         next_index = (current_index + 1) % len(positions)
         self.door_position = positions[next_index]

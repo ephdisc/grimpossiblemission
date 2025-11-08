@@ -11,8 +11,7 @@ import RealityKit
 import Combine
 
 /// Coordinates the game loop, systems, and entities.
-@Observable
-class GameCoordinator {
+class GameCoordinator: ObservableObject {
 
     // MARK: - Properties
 
@@ -24,6 +23,22 @@ class GameCoordinator {
 
     /// Room entities for camera management
     private var roomEntities: [Entity] = []
+
+    /// Level data for lazy room generation
+    private var levelData: LevelData?
+
+    /// Map of room index to generated room entity
+    private var generatedRooms: [Int: Entity] = [:]
+
+    /// Map of room index to searchable items in that room
+    private var roomSearchables: [Int: [Entity]] = [:]
+
+    /// Map of roomIndex to (gridRow, worldCol, roomId) for lazy generation
+    /// Note: worldCol is mirrored from grid col (worldCol = cols - 1 - col)
+    private var roomIndexToGridMap: [Int: (row: Int, worldCol: Int, roomId: Int)] = [:]
+
+    /// RealityKit scene content reference
+    private var sceneContent: (any RealityViewContentProtocol)?
 
     /// Input provider (injected)
     private let inputProvider: InputProvider
@@ -46,6 +61,12 @@ class GameCoordinator {
     /// Current room index
     private var currentRoomIndex: Int = 0
 
+    /// World initialization manager (event-based initialization coordination)
+    private let worldInitManager: WorldInitializationManager
+
+    /// Track if all rooms have been generated for debug zoom
+    private var allRoomsGenerated: Bool = false
+
     /// Timer for update loop
     private var updateTimer: Timer?
 
@@ -65,9 +86,15 @@ class GameCoordinator {
     init(inputProvider: InputProvider, cameraController: OrthographicCameraController) {
         self.inputProvider = inputProvider
         self.cameraController = cameraController
+        self.worldInitManager = WorldInitializationManager()
 
         setupSystems()
         setupWorld()
+
+        // Configure world initialization callback
+        worldInitManager.onWorldReady = { [weak self] in
+            self?.onWorldReady()
+        }
     }
 
     // MARK: - Setup
@@ -112,6 +139,9 @@ class GameCoordinator {
         cameraSystem.onRoomChanged = { [weak self] roomIndex, playerPosition in
             self?.onPlayerEnteredRoom(roomIndex: roomIndex, entryPosition: playerPosition)
         }
+        cameraSystem.onDebugZoomActivated = { [weak self] in
+            self?.generateAllRooms()
+        }
         self.cameraManagementSystem = cameraSystem
         systems.append(cameraSystem)
 
@@ -121,21 +151,26 @@ class GameCoordinator {
     }
 
     private func setupWorld() {
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] ===== PHASE 1: Lightweight Setup =====")
+        }
+
         var spawnPosition: SIMD3<Float>? = nil
         var spawnRoomIndex: Int = 0
 
-        // Load level from JSON
-        if let levelData = LevelLoader.loadLevel(filename: "level_001") {
-            // Create rooms and searchable items from level data
-            let result = createRoomsFromLevel(levelData: levelData)
-            roomEntities = result.rooms
-            entities.append(contentsOf: roomEntities)
+        // Load level from JSON (lightweight - just parsing)
+        if let data = LevelLoader.loadLevel(filename: "level_001") {
+            self.levelData = data
 
-            // Add searchable items to entities (not room children)
-            entities.append(contentsOf: result.searchables)
+            if GameConfig.debugLogging {
+                print("[GameCoordinator] Loaded level 'level_001' with \(data.rooms.count) room definitions")
+            }
 
-            // Find spawn position from level data
-            if let spawn = findSpawnPosition(levelData: levelData) {
+            // Build room index mapping (mirrors the iteration order used in spawn finding)
+            buildRoomIndexMapping()
+
+            // Find spawn position from level data (lightweight, just scans JSON)
+            if let spawn = findSpawnPosition(levelData: data) {
                 spawnPosition = spawn.position
                 spawnRoomIndex = spawn.roomIndex
 
@@ -147,22 +182,36 @@ class GameCoordinator {
                 spawnPosition = SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
             }
 
+            // LAZY LOADING: Only generate the spawn room initially
             if GameConfig.debugLogging {
-                print("[GameCoordinator] Loaded level with \(roomEntities.count) rooms and \(result.searchables.count) searchable items")
+                print("[GameCoordinator] ===== PHASE 2: Entity Creation =====")
+                print("[GameCoordinator] Generating only spawn room \(spawnRoomIndex)...")
             }
+
+            generateRoom(spawnRoomIndex)
+
+            if GameConfig.debugLogging {
+                print("[GameCoordinator] Spawn room generated. Ready to start game.")
+            }
+
+            // Set camera to spawn room (room already registered by generateRoom)
+            if GameConfig.debugLogging {
+                print("[GameCoordinator] Setting initial camera to spawn room \(spawnRoomIndex)")
+            }
+            cameraManagementSystem?.setInitialRoom(spawnRoomIndex)
         } else {
             // Fallback to hardcoded POC rooms if JSON loading fails
             print("[GameCoordinator] Warning: Failed to load level JSON, using POC rooms")
             roomEntities = createPOCRooms()
             entities.append(contentsOf: roomEntities)
             spawnPosition = SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
+
+            // Register rooms with camera system (POC path only)
+            cameraManagementSystem?.registerRoomEntities(roomEntities)
+
+            // Set camera to spawn room
+            cameraManagementSystem?.setInitialRoom(spawnRoomIndex)
         }
-
-        // Register rooms with camera system
-        cameraManagementSystem?.registerRoomEntities(roomEntities)
-
-        // Set camera to spawn room
-        cameraManagementSystem?.setInitialRoom(spawnRoomIndex)
 
         // Use spawn position for player creation (or fall back to default)
         let finalSpawnPosition = spawnPosition ?? SIMD3<Float>(GameConfig.playerStartX, GameConfig.playerStartY, 0)
@@ -186,24 +235,211 @@ class GameCoordinator {
             print("[GameCoordinator] World created: \(entities.count) entities")
             print("[GameCoordinator] Initial spawn position: (\(finalSpawnPosition.x), \(finalSpawnPosition.y)) in room \(spawnRoomIndex)")
             print("[GameCoordinator] Initial entrance position: (\(roomEntrancePosition.x), \(roomEntrancePosition.y))")
+            print("[GameCoordinator] ⚠️  Physics NOT started yet - waiting for scene initialization")
+        }
+    }
+
+    // MARK: - Room Generation
+
+    /// Generate all rooms (for debug zoom visualization)
+    func generateAllRooms() {
+        guard !allRoomsGenerated else { return }
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Debug zoom activated - generating all rooms...")
+        }
+
+        // Generate all rooms in the mapping
+        for roomIndex in roomIndexToGridMap.keys.sorted() {
+            generateRoom(roomIndex)
+        }
+
+        allRoomsGenerated = true
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] ✅ All \(roomIndexToGridMap.count) rooms generated for debug zoom")
+        }
+    }
+
+    // MARK: - Lazy Room Generation
+
+    /// Build mapping from roomIndex to grid coordinates (mirrors iteration order of spawn finding)
+    private func buildRoomIndexMapping() {
+        guard let levelData = levelData else { return }
+        guard let floorLayouts = levelData.floorLayouts, !floorLayouts.isEmpty else { return }
+
+        var roomIndexCounter = 0
+
+        for floorLayout in floorLayouts {
+            for row in 0..<floorLayout.rows {
+                for col in 0..<floorLayout.cols {
+                    guard row < floorLayout.grid.count,
+                          col < floorLayout.grid[row].count else {
+                        continue
+                    }
+
+                    let roomId = floorLayout.grid[row][col]
+                    if roomId != 0 {
+                        // Grid columns are mirrored to world columns (matches spawn finding logic)
+                        let worldCol = floorLayout.cols - 1 - col
+                        roomIndexToGridMap[roomIndexCounter] = (row: row, worldCol: worldCol, roomId: roomId)
+                        roomIndexCounter += 1
+                    }
+                }
+            }
+        }
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Built room index mapping: \(roomIndexToGridMap.count) rooms")
+        }
+    }
+
+    /// Generate a single room on-demand
+    private func generateRoom(_ roomIndex: Int) {
+        // Bounds check: ignore negative or invalid indices
+        if roomIndex < 0 {
+            return  // Silently ignore negative indices
+        }
+
+        // Check if already generated
+        if generatedRooms[roomIndex] != nil {
+            if GameConfig.debugLogging {
+                print("[GameCoordinator] Room \(roomIndex) already generated, skipping")
+            }
+            return
+        }
+
+        // Look up grid coordinates from mapping
+        guard let gridInfo = roomIndexToGridMap[roomIndex] else {
+            // Room index not in mapping (out of range)
+            return
+        }
+
+        let gridRow = gridInfo.row
+        let worldCol = gridInfo.worldCol  // Already mirrored in mapping
+        let roomId = gridInfo.roomId
+
+        guard let levelData = levelData else {
+            print("[GameCoordinator] Error: No level data available for lazy generation")
+            return
+        }
+
+        guard let floorLayouts = levelData.floorLayouts, !floorLayouts.isEmpty else {
+            print("[GameCoordinator] Error: No floor layouts available")
+            return
+        }
+
+        let floorLayout = floorLayouts[0]  // Assume single floor for now
+
+        guard let roomData = LevelLoader.getRoom(id: roomId, from: levelData) else {
+            print("[GameCoordinator] Error: Room data not found for ID \(roomId)")
+            return
+        }
+
+        // Convert worldCol back to gridCol for connection checking
+        let gridCol = floorLayout.cols - 1 - worldCol
+
+        // Determine door connections (uses grid coordinates)
+        var hasLeftDoor = false
+        var hasRightDoor = false
+        var hasTopDoor = false
+        var hasBottomDoor = false
+
+        for connection in floorLayout.connections {
+            if connection.from.row == gridRow && connection.from.col == gridCol {
+                switch connection.doorPosition {
+                case "left": hasLeftDoor = true
+                case "right": hasRightDoor = true
+                case "top": hasTopDoor = true
+                case "bot": hasBottomDoor = true
+                default: break
+                }
+            }
+            if connection.to.row == gridRow && connection.to.col == gridCol {
+                // Reverse direction for "to" side
+                switch connection.doorPosition {
+                case "left": hasRightDoor = true
+                case "right": hasLeftDoor = true
+                case "top": hasBottomDoor = true
+                case "bot": hasTopDoor = true
+                default: break
+                }
+            }
+        }
+
+        // Generate the room (createRoomFromJSONWithConnections expects worldCol as gridCol parameter)
+        let result = createRoomFromJSONWithConnections(
+            roomData: roomData,
+            roomIndex: roomIndex,
+            gridRow: gridRow,
+            gridCol: worldCol,  // Pass worldCol as gridCol (function expects world coordinates)
+            hasLeftDoor: hasLeftDoor,
+            hasRightDoor: hasRightDoor,
+            hasTopDoor: hasTopDoor,
+            hasBottomDoor: hasBottomDoor
+        )
+
+        // Store generated room and searchables
+        generatedRooms[roomIndex] = result.room
+        roomSearchables[roomIndex] = result.searchables
+
+        // Add room to entities and scene
+        roomEntities.append(result.room)
+        entities.append(result.room)
+        entities.append(contentsOf: result.searchables)
+
+        // Add to scene if available
+        if let content = sceneContent {
+            content.add(result.room)
+            for searchable in result.searchables {
+                content.add(searchable)
+            }
+        }
+
+        // Register with camera system
+        cameraManagementSystem?.registerRoomEntity(result.room, at: roomIndex)
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] ✅ Generated room \(roomIndex) (ID: \(roomId), worldCol: \(worldCol)) with \(result.searchables.count) searchables")
+            if let bounds = result.room.components[RoomBoundsComponent.self] {
+                print("[GameCoordinator]    Room bounds: X[\(bounds.minX)-\(bounds.maxX)] Y[\(bounds.minY)-\(bounds.maxY)]")
+            }
         }
     }
 
     // MARK: - Lifecycle
 
-    /// Start the game loop
-    func start() {
+    /// Called when world initialization is complete and physics can start
+    private func onWorldReady() {
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] 🚀 World ready - starting game loop with physics")
+        }
+
         // Start input listening
         inputProvider.startListening()
 
-        // Start update loop
+        // Start update loop (includes physics)
         lastUpdateTime = CACurrentMediaTime()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             self?.update()
         }
 
         if GameConfig.debugLogging {
-            print("[GameCoordinator] Game started")
+            print("[GameCoordinator] Game loop started")
+        }
+    }
+
+    /// Start the initialization process (called from ContentView after scene setup)
+    func startInitialization() {
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Phase 4: Starting initialization sequence...")
+        }
+
+        // Mark scene as initialized (entities already registered in addEntitiesToScene)
+        worldInitManager.markSceneInitialized()
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Initialization sequence started - awaiting world ready event")
         }
     }
 
@@ -274,6 +510,22 @@ class GameCoordinator {
 
     /// Add all entities to a RealityKit scene
     func addEntitiesToScene(_ content: some RealityViewContentProtocol) {
+        // Store scene content reference for lazy room generation
+        self.sceneContent = content
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Phase 3: Adding entities to RealityKit scene...")
+        }
+
+        // IMPORTANT: Register entities with initialization manager BEFORE adding to scene
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Registering \(roomEntities.count) room entities and player with WorldInitializationManager")
+        }
+        if let player = player {
+            worldInitManager.registerPlayerEntity(player)
+        }
+        worldInitManager.registerRoomEntities(roomEntities)
+
         // Add camera
         content.add(cameraController.cameraEntity)
 
@@ -296,6 +548,16 @@ class GameCoordinator {
 
         if GameConfig.debugLogging {
             print("[GameCoordinator] Entities added to scene")
+        }
+
+        // Notify initialization manager that entities have been added (manager now monitors them)
+        worldInitManager.markRoomEntitiesAdded()
+        if player != nil {
+            worldInitManager.markPlayerEntityAdded()
+        }
+
+        if GameConfig.debugLogging {
+            print("[GameCoordinator] Waiting for entities to be properly anchored before starting physics...")
         }
     }
 
@@ -384,6 +646,13 @@ class GameCoordinator {
             print("[GameCoordinator] Player entered room \(roomIndex) at position (\(entryPosition.x), \(entryPosition.y))")
             print("[GameCoordinator] Room entrance position captured for restart")
         }
+
+        // LAZY LOADING: Generate this room if not already generated
+        generateRoom(roomIndex)
+
+        // Pre-generate adjacent rooms (left and right)
+        generateRoom(roomIndex - 1)  // Left room
+        generateRoom(roomIndex + 1)  // Right room
     }
 
     // MARK: - Room Restart

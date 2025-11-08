@@ -31,6 +31,7 @@ class InputSystem: GameSystem {
                 inputComponent.moveDown = inputState.moveDown
                 inputComponent.jump = inputState.jump
                 inputComponent.interact = inputState.interact
+                inputComponent.debugZoom = inputState.debugZoom
 
                 // Write back to entity
                 entity.components.set(inputComponent)
