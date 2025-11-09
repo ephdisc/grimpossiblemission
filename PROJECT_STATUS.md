@@ -1,7 +1,7 @@
 # GrimpossibleMission - Complete Project Status & Architecture
 
-**Last Updated:** 2025-11-09
-**Status:** Active Development - Core Systems Complete
+**Last Updated:** 2025-11-09 (Siri Remote Support Added)
+**Status:** Active Development - Core Systems Complete + Siri Remote Input
 
 This document provides a comprehensive overview of both the tvOS game and the level editor, their current state, architecture, and how they work together.
 
@@ -39,10 +39,11 @@ This document provides a comprehensive overview of both the tvOS game and the le
 ### Project Statistics
 
 **tvOS Game:**
-- 40+ Swift files
-- 2,793+ lines of core game logic
+- 43+ Swift files (3 new for Siri Remote support)
+- 3,000+ lines of core game logic
 - 14 ECS components
 - 8 ECS systems
+- 3 input providers (GameController, SiriRemote, Composite)
 - 5 DI protocols
 - 30+ configurable parameters
 
@@ -88,9 +89,10 @@ Located in `/GrimpossibleMission/Systems/`
 
 **Execution Order (critical for proper physics):**
 
-1. **InputSystem** - Reads controller, updates InputStateComponent
-   - Game controller mapping (Xbox, PlayStation)
-   - Siri Remote support (planned)
+1. **InputSystem** - Reads input providers, updates InputStateComponent
+   - Game controller support (Xbox, PlayStation)
+   - Siri Remote gesture support (touchpad swipes, select button)
+   - Composite input from multiple sources
    - 60 FPS polling rate
 
 2. **JumpSystem** - Handles jump mechanics
@@ -194,6 +196,12 @@ Phase 5: Physics Start (onWorldReady)
 
 ### Input Handling
 
+**Multiple Input Sources (Priority System):**
+
+The game supports simultaneous input from multiple sources via `CompositeInputProvider`:
+- Priority 1: Game Controllers (Xbox, PlayStation)
+- Priority 2: Siri Remote (touchpad gestures)
+
 **GameControllerInputProvider** (`/Systems/GameControllerInputProvider.swift` - 250+ lines)
 
 **Game Controller Mapping:**
@@ -209,6 +217,36 @@ Phase 5: Physics Start (onWorldReady)
 - Fallback to second controller
 - Configurable deadzone (0.2)
 - 60 FPS polling
+
+**SiriRemoteInputProvider** (`/Systems/SiriRemoteInputProvider.swift` - NEW)
+
+**Siri Remote Mapping:**
+- Swipe Right on touchpad → Move Left (inverted to match camera)
+- Swipe Left on touchpad → Move Right (inverted to match camera)
+- Swipe Up on touchpad → Interact (searchables)
+- Swipe Down on touchpad → Move Down
+- Click/Select button → Jump
+
+**Features:**
+- UIGestureRecognizer-based input capture
+- Swipe reset timers (0.3s for movement, 1.0s for interact)
+- Integrated via UIViewRepresentable bridge
+- Works alongside game controller input
+
+**CompositeInputProvider** (`/Systems/CompositeInputProvider.swift` - NEW)
+
+**Purpose:**
+- Aggregates input from multiple providers
+- OR's together all input states
+- Allows seamless switching between controller and remote
+- Users can use either input method without configuration
+
+**Architecture:**
+```swift
+CompositeInputProvider
+├─ GameControllerInputProvider (Priority 1)
+└─ SiriRemoteInputProvider (Priority 2)
+```
 
 ### Camera System
 
@@ -576,6 +614,8 @@ Python Editor → JSON File → Swift LevelLoader → RealityKit Entities
 - [x] Smooth camera transitions
 - [x] Static room camera mode
 - [x] Game controller input (Xbox, PlayStation)
+- [x] Siri Remote gesture support (swipes, select button)
+- [x] Composite input system (multiple sources)
 - [x] B button capture (prevents exit)
 - [x] Controller hot-plugging
 - [x] Searchable interactive items
@@ -608,7 +648,6 @@ Python Editor → JSON File → Swift LevelLoader → RealityKit Entities
 ### ⏳ Planned / Not Yet Implemented
 
 **tvOS Game:**
-- [ ] Siri Remote gesture support
 - [ ] Elevator shaft camera follow mode
 - [ ] Enemy AI
 - [ ] Enemy spawning from level data
@@ -650,7 +689,10 @@ Python Editor → JSON File → Swift LevelLoader → RealityKit Entities
 **Systems:**
 - `/GrimpossibleMission/Systems/MovementSystem.swift` - Movement + Physics (400+ lines)
 - `/GrimpossibleMission/Systems/JumpSystem.swift` - Jump mechanics
-- `/GrimpossibleMission/Systems/GameControllerInputProvider.swift` - Input (250+ lines)
+- `/GrimpossibleMission/Systems/GameControllerInputProvider.swift` - Game controller input (250+ lines)
+- `/GrimpossibleMission/Systems/SiriRemoteInputProvider.swift` - Siri Remote gesture input (NEW)
+- `/GrimpossibleMission/Systems/CompositeInputProvider.swift` - Multi-source input aggregator (NEW)
+- `/GrimpossibleMission/Systems/GestureRecognizerView.swift` - UIViewRepresentable for gestures (NEW)
 - `/GrimpossibleMission/Systems/CameraSystem.swift` - Camera controller (170+ lines)
 - `/GrimpossibleMission/Systems/SearchSystem.swift` - Interactive items
 - `/GrimpossibleMission/Systems/RoomRestartSystem.swift` - Room reset
