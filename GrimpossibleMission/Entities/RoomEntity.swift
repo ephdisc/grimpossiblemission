@@ -557,6 +557,10 @@ func createRoomFromJSON(roomData: RoomData, roomIndex: Int) -> (room: Entity, se
 ///   - hasRightDoor: Whether this room has a door on the right wall
 ///   - hasTopDoor: Whether this room has a door on the top wall
 ///   - hasBottomDoor: Whether this room has a door on the bottom wall
+///   - leftDoorPosition: Position of door on left wall ("top" or "bot"), or nil
+///   - rightDoorPosition: Position of door on right wall ("top" or "bot"), or nil
+///   - topDoorPosition: Position of door on top wall ("left" or "right"), or nil
+///   - bottomDoorPosition: Position of door on bottom wall ("left" or "right"), or nil
 /// - Returns: Tuple containing (room entity, array of searchable item entities)
 func createRoomFromJSONWithConnections(
     roomData: RoomData,
@@ -566,7 +570,11 @@ func createRoomFromJSONWithConnections(
     hasLeftDoor: Bool,
     hasRightDoor: Bool,
     hasTopDoor: Bool,
-    hasBottomDoor: Bool
+    hasBottomDoor: Bool,
+    leftDoorPosition: String? = nil,
+    rightDoorPosition: String? = nil,
+    topDoorPosition: String? = nil,
+    bottomDoorPosition: String? = nil
 ) -> (room: Entity, searchables: [Entity]) {
     let room = Entity()
     room.name = "Room_\(roomData.id)_r\(gridRow)c\(gridCol)"
@@ -594,6 +602,19 @@ func createRoomFromJSONWithConnections(
 
     // Determine doorway heights (use standard player height + 2 tiles)
     let doorwayHeight = GameConfig.playerHeightTiles + 2
+
+    // Calculate door Y ranges for vertical walls (left/right)
+    let doorYStart: (String?) -> Int = { position in
+        switch position {
+        case "top":
+            return roomData.height - 1 - doorwayHeight  // Top of wall
+        case "bot", _:  // Default to bottom for compatibility
+            return 1  // Bottom of wall (above floor)
+        }
+    }
+
+    let leftDoorYStart = hasLeftDoor ? doorYStart(leftDoorPosition) : -1
+    let rightDoorYStart = hasRightDoor ? doorYStart(rightDoorPosition) : -1
 
     // Get theme colors
     let wallColor = roomData.theme?.wallColor.flatMap { UIColor.from(string: $0) } ?? .darkGray
@@ -636,8 +657,8 @@ func createRoomFromJSONWithConnections(
 
     // Create left wall tiles
     for y in 1..<(roomData.height - 1) {
-        // Skip entry area if left door exists
-        if hasLeftDoor && y < doorwayHeight {
+        // Skip door area if left door exists
+        if hasLeftDoor && y >= leftDoorYStart && y < (leftDoorYStart + doorwayHeight) {
             continue
         }
 
@@ -652,8 +673,8 @@ func createRoomFromJSONWithConnections(
 
     // Create right wall tiles
     for y in 1..<(roomData.height - 1) {
-        // Skip entry area if right door exists
-        if hasRightDoor && y < doorwayHeight {
+        // Skip door area if right door exists
+        if hasRightDoor && y >= rightDoorYStart && y < (rightDoorYStart + doorwayHeight) {
             continue
         }
 
@@ -828,11 +849,17 @@ private func createRoomsFromFloorLayouts(floorLayouts: [FloorLayout], levelData:
                 let gridKey = "\(row),\(col)"
                 let connections = connectionMap[gridKey] ?? []
 
-                // Determine which walls have doorways
+                // Determine which walls have doorways and their positions
                 let hasLeftDoor = connections.contains { $0.direction == "left" }
                 let hasRightDoor = connections.contains { $0.direction == "right" }
                 let hasTopDoor = connections.contains { $0.direction == "top" }
                 let hasBottomDoor = connections.contains { $0.direction == "bottom" }
+
+                // Extract door positions
+                let leftDoorPosition = connections.first { $0.direction == "left" }?.doorPosition
+                let rightDoorPosition = connections.first { $0.direction == "right" }?.doorPosition
+                let topDoorPosition = connections.first { $0.direction == "top" }?.doorPosition
+                let bottomDoorPosition = connections.first { $0.direction == "bottom" }?.doorPosition
 
                 // Create the room with connections
                 // Note: Grid columns are mirrored horizontally to match level editor
@@ -847,7 +874,11 @@ private func createRoomsFromFloorLayouts(floorLayouts: [FloorLayout], levelData:
                     hasLeftDoor: hasLeftDoor,
                     hasRightDoor: hasRightDoor,
                     hasTopDoor: hasTopDoor,
-                    hasBottomDoor: hasBottomDoor
+                    hasBottomDoor: hasBottomDoor,
+                    leftDoorPosition: leftDoorPosition,
+                    rightDoorPosition: rightDoorPosition,
+                    topDoorPosition: topDoorPosition,
+                    bottomDoorPosition: bottomDoorPosition
                 )
 
                 rooms.append(result.room)

@@ -344,25 +344,66 @@ class GameCoordinator: ObservableObject {
         var hasRightDoor = false
         var hasTopDoor = false
         var hasBottomDoor = false
+        var leftDoorPosition: String? = nil
+        var rightDoorPosition: String? = nil
+        var topDoorPosition: String? = nil
+        var bottomDoorPosition: String? = nil
 
         for connection in floorLayout.connections {
+            // Check if this room is the "from" side of the connection
             if connection.from.row == gridRow && connection.from.col == gridCol {
-                switch connection.doorPosition {
-                case "left": hasLeftDoor = true
-                case "right": hasRightDoor = true
-                case "top": hasTopDoor = true
-                case "bot": hasBottomDoor = true
-                default: break
+                // Determine which wall based on relative positions
+                // Note: Grid is horizontally mirrored, so left/right are flipped
+                if connection.from.row == connection.to.row {
+                    // Horizontal connection (same row)
+                    if connection.from.col < connection.to.col {
+                        // From has lower col index in grid, which means FROM is to the RIGHT in world
+                        hasLeftDoor = true
+                        leftDoorPosition = connection.doorPosition
+                    } else {
+                        // From has higher col index in grid, which means FROM is to the LEFT in world
+                        hasRightDoor = true
+                        rightDoorPosition = connection.doorPosition
+                    }
+                } else if connection.from.col == connection.to.col {
+                    // Vertical connection (same column)
+                    if connection.from.row < connection.to.row {
+                        // From is above To
+                        hasBottomDoor = true
+                        bottomDoorPosition = connection.doorPosition
+                    } else {
+                        // From is below To
+                        hasTopDoor = true
+                        topDoorPosition = connection.doorPosition
+                    }
                 }
             }
+
+            // Check if this room is the "to" side of the connection
             if connection.to.row == gridRow && connection.to.col == gridCol {
-                // Reverse direction for "to" side
-                switch connection.doorPosition {
-                case "left": hasRightDoor = true
-                case "right": hasLeftDoor = true
-                case "top": hasBottomDoor = true
-                case "bot": hasTopDoor = true
-                default: break
+                // Determine which wall based on relative positions
+                if connection.from.row == connection.to.row {
+                    // Horizontal connection (same row)
+                    if connection.from.col < connection.to.col {
+                        // To has higher col index, which means TO is to the LEFT in world
+                        hasRightDoor = true
+                        rightDoorPosition = connection.doorPosition
+                    } else {
+                        // To has lower col index, which means TO is to the RIGHT in world
+                        hasLeftDoor = true
+                        leftDoorPosition = connection.doorPosition
+                    }
+                } else if connection.from.col == connection.to.col {
+                    // Vertical connection (same column)
+                    if connection.from.row < connection.to.row {
+                        // To is below From
+                        hasTopDoor = true
+                        topDoorPosition = connection.doorPosition
+                    } else {
+                        // To is above From
+                        hasBottomDoor = true
+                        bottomDoorPosition = connection.doorPosition
+                    }
                 }
             }
         }
@@ -376,7 +417,11 @@ class GameCoordinator: ObservableObject {
             hasLeftDoor: hasLeftDoor,
             hasRightDoor: hasRightDoor,
             hasTopDoor: hasTopDoor,
-            hasBottomDoor: hasBottomDoor
+            hasBottomDoor: hasBottomDoor,
+            leftDoorPosition: leftDoorPosition,
+            rightDoorPosition: rightDoorPosition,
+            topDoorPosition: topDoorPosition,
+            bottomDoorPosition: bottomDoorPosition
         )
 
         // Store generated room and searchables

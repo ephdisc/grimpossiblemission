@@ -18,7 +18,7 @@ from PyQt5.QtGui import QKeySequence, QIcon, QColor
 
 from data_models import Room, Level, TileType, LayoutEntry
 from tile_canvas import TileCanvas
-from layout_editor import LayoutEditorTab
+from layout_editor import LayoutEditorTab, RoomPreviewWidget
 from typing import Optional, List, Dict, Any
 
 
@@ -297,9 +297,61 @@ class RoomEditorTab(QWidget):
         """Refresh the room list display."""
         self.room_list.clear()
         for room in self.level.rooms:
-            item = QListWidgetItem(f"Room {room.id} ({room.width}x{room.height})")
+            # Create list item
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, room.id)
+
+            # Create custom widget with preview
+            widget = QWidget()
+            layout = QVBoxLayout()
+            layout.setContentsMargins(5, 5, 5, 5)
+            layout.setSpacing(5)
+
+            # Room preview
+            preview = RoomPreviewWidget(room, size=100)
+            preview.setAlignment(Qt.AlignCenter)
+            layout.addWidget(preview)
+
+            # Room label
+            label = QLabel(f"Room {room.id}\n{room.width}x{room.height}")
+            label.setAlignment(Qt.AlignCenter)
+            label.setStyleSheet("font-size: 9pt;")
+            layout.addWidget(label)
+
+            widget.setLayout(layout)
+
+            # Set size hint for the item
+            item.setSizeHint(widget.sizeHint())
+
+            # Add item and set widget
             self.room_list.addItem(item)
+            self.room_list.setItemWidget(item, widget)
+
+    def update_current_room_preview(self):
+        """Update the preview for the currently selected room."""
+        if not self.current_room:
+            return
+
+        # Find the list item for the current room
+        for i in range(self.room_list.count()):
+            item = self.room_list.item(i)
+            if item.data(Qt.UserRole) == self.current_room.id:
+                # Get the widget and update the preview
+                widget = self.room_list.itemWidget(item)
+                if widget:
+                    # Find the preview widget (first child in the layout)
+                    layout = widget.layout()
+                    if layout and layout.count() > 0:
+                        preview = layout.itemAt(0).widget()
+                        if isinstance(preview, RoomPreviewWidget):
+                            preview.set_room(self.current_room)
+
+                    # Also update the label
+                    if layout and layout.count() > 1:
+                        label = layout.itemAt(1).widget()
+                        if isinstance(label, QLabel):
+                            label.setText(f"Room {self.current_room.id}\n{self.current_room.width}x{self.current_room.height}")
+                break
 
     def refresh(self):
         """Refresh the entire tab."""
@@ -424,6 +476,8 @@ class RoomEditorTab(QWidget):
             from copy import deepcopy
             state = deepcopy(self.current_room.interior)
             self.undo_stack.push(state)
+            # Update the preview thumbnail
+            self.update_current_room_preview()
 
     def on_room_id_changed(self, new_id: int):
         """Handle room ID change."""
@@ -450,7 +504,7 @@ class RoomEditorTab(QWidget):
         if new_width != self.current_room.width or new_height != self.current_room.height:
             self.current_room.resize(new_width, new_height)
             self.canvas.set_room(self.current_room)
-            self.refresh_room_list()
+            self.update_current_room_preview()
 
     def on_exits_changed(self):
         """Handle exit configuration changes."""
@@ -478,6 +532,7 @@ class RoomEditorTab(QWidget):
     def fill_selection(self):
         """Fill the current selection."""
         self.canvas.fill_selection(self.canvas.current_tile_type)
+        self.update_current_room_preview()
 
     def clear_room(self):
         """Clear all tiles in the room."""
@@ -492,6 +547,7 @@ class RoomEditorTab(QWidget):
 
         if reply == QMessageBox.Yes:
             self.canvas.clear_room()
+            self.update_current_room_preview()
 
     def update_tile_type_selector(self, tile_type: int):
         """Update the tile type selector (called from canvas keyboard shortcut)."""
@@ -507,6 +563,7 @@ class RoomEditorTab(QWidget):
                 from copy import deepcopy
                 self.current_room.interior = deepcopy(state)
                 self.canvas.update()
+                self.update_current_room_preview()
 
     def redo(self):
         """Redo the last undone change."""
@@ -516,6 +573,7 @@ class RoomEditorTab(QWidget):
                 from copy import deepcopy
                 self.current_room.interior = deepcopy(state)
                 self.canvas.update()
+                self.update_current_room_preview()
 
 
 class LevelEditor(QMainWindow):
@@ -699,8 +757,6 @@ class LevelEditor(QMainWindow):
                 self.tabs.addTab(self.layout_editor, "Layout Editor")
 
                 self.setWindowTitle(f"GrimpossibleMission Level Editor - {filepath}")
-
-                QMessageBox.information(self, "Success", "Level loaded successfully!")
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load level:\n{str(e)}")
