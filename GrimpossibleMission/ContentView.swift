@@ -10,15 +10,21 @@ import RealityKit
 
 struct ContentView: View {
 
+    // Input providers (created outside of StateObject to access gesture recognizers)
+    private static let gameControllerProvider = GameControllerInputProvider()
+    private static let siriRemoteProvider = SiriRemoteInputProvider()
+    private static let compositeInputProvider = CompositeInputProvider(
+        providers: [gameControllerProvider, siriRemoteProvider]
+    )
+
     // Game coordinator manages ECS lifecycle (uses @StateObject to persist across view updates)
     @StateObject private var gameCoordinator: GameCoordinator = {
         // Set up dependency injection
-        let inputProvider = GameControllerInputProvider()
         let cameraController = OrthographicCameraController()
 
-        // Create game coordinator with dependencies
+        // Create game coordinator with composite input (controller + Siri Remote)
         return GameCoordinator(
-            inputProvider: inputProvider,
+            inputProvider: compositeInputProvider,
             cameraController: cameraController
         )
     }()
@@ -32,6 +38,13 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            // Gesture recognizer view for Siri Remote input (invisible, captures gestures)
+            GestureRecognizerView(
+                gestureRecognizers: Self.siriRemoteProvider.createGestureRecognizers()
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(true)
+
             // Main game view
             RealityView { content in
                 // Only run initialization once (SwiftUI may call this closure multiple times)
